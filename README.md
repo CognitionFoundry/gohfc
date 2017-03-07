@@ -26,7 +26,7 @@ go get golang.org/x/net/context
 
 ### Installation
 ```
-go get github.com/CognitionFoundry/go-hfc
+go get github.com/CognitionFoundry/gohfc
 ```
 You must have running at least one CA, Peer and Orderer to be able to use this SDK.
 
@@ -38,7 +38,7 @@ See examples folder
 package main
 
 import (
-	"github.com/CognitionFoundry/go-hfc"
+	"github.com/CognitionFoundry/gohfc"
 	"fmt"
 	"os"
 	"github.com/hyperledger/fabric/protos/peer"
