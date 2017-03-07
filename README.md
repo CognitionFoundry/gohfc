@@ -7,6 +7,8 @@ It gives you series of APIs that allow you to use Fabric using Go
  
 **Note:** This is not an official Hyperledger Fabric SDK. For official SDKs see the [official documentation](http://hyperledger-fabric.readthedocs.io/en/latest/)  
 
+**Note:** This SDK is for Hyperledger Fabric v1, it os not compatible with v0.6
+
 ### Requirements
 * Go >=1.7
 * sha3
