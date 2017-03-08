@@ -30,8 +30,8 @@ import (
 //TODO queryBlock
 //TODO queryTransaction
 
-// GoHlClient provides higher level API to execute different transactions and operations to fabric
-type GoHlClient struct {
+// GohfcClient provides higher level API to execute different transactions and operations to fabric
+type GohfcClient struct {
 	Crypt    CryptSuite
 	KVStore  KeyValueStore
 	CAClient CAClient
@@ -61,7 +61,7 @@ type InstallResponse struct {
 // Note that if enrollmentID is found in key-Value store no request will be executed and data from
 // Key-Value store will be returned. This is true even when ECert is revoked. It is a responsibility of developers
 // to "clean" Key-Value store.
-func (c *GoHlClient) Enroll(enrollmentId, password string) (*Identity, error) {
+func (c *GohfcClient) Enroll(enrollmentId, password string) (*Identity, error) {
 	prevCert, ok, err := c.KVStore.Get(enrollmentId)
 	if err != nil {
 		return nil, err
@@ -92,7 +92,7 @@ func (c *GoHlClient) Enroll(enrollmentId, password string) (*Identity, error) {
 }
 
 // Register registers new user using CAClient implementation.
-func (c *GoHlClient) Register(certificate *Certificate, req *RegistrationRequest) (*CAResponse, error) {
+func (c *GohfcClient) Register(certificate *Certificate, req *RegistrationRequest) (*CAResponse, error) {
 	return c.CAClient.Register(certificate, req)
 }
 
@@ -100,7 +100,7 @@ func (c *GoHlClient) Register(certificate *Certificate, req *RegistrationRequest
 // Note that this invocation will NOT execute chaincode on ledger and will NOT change height of block-chain.
 // Result will be from peers local block-chain data copy. It is very fast and scalable approach but in some rare cases
 // peers can be out of sync and return different result from data in actual ledger.
-func (c *GoHlClient) Query(certificate *Certificate, chain *Chain, peers []*Peer, args []string) (*QueryResponse, error) {
+func (c *GohfcClient) Query(certificate *Certificate, chain *Chain, peers []*Peer, args []string) (*QueryResponse, error) {
 	prop, err := chain.CreateTransactionProposal(certificate, args)
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func (c *GoHlClient) Query(certificate *Certificate, chain *Chain, peers []*Peer
 // that actual ledger and block-chain operations are finished and/or are successful.
 // Events must be used to listen for block events and compare transaction id (TxId) from this method
 // to transaction ids  from events.
-func (c *GoHlClient) Invoke(certificate *Certificate, chain *Chain, peers []*Peer, orderers []*Orderer, args []string) (*InvokeResponse, error) {
+func (c *GohfcClient) Invoke(certificate *Certificate, chain *Chain, peers []*Peer, orderers []*Orderer, args []string) (*InvokeResponse, error) {
 	prop, err := chain.CreateTransactionProposal(certificate, args)
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func (c *GoHlClient) Invoke(certificate *Certificate, chain *Chain, peers []*Pee
 
 // Install will install chaincode to provided peers.
 // Note that in this version only Go chaincode is supported for installation.
-func (c *GoHlClient) Install(certificate *Certificate, chain *Chain, peers []*Peer, req *InstallRequest) (*InstallResponse, error) {
+func (c *GohfcClient) Install(certificate *Certificate, chain *Chain, peers []*Peer, req *InstallRequest) (*InstallResponse, error) {
 	prop, err := chain.CreateInstallProposal(certificate, req)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (c *GoHlClient) Install(certificate *Certificate, chain *Chain, peers []*Pe
 }
 
 // GetChannels returns a list of channels that peer has joined.
-func (c *GoHlClient) GetChannels(certificate *Certificate, qPeer *Peer, mspId string) (*peer.ChannelQueryResponse, error) {
+func (c *GohfcClient) GetChannels(certificate *Certificate, qPeer *Peer, mspId string) (*peer.ChannelQueryResponse, error) {
 	chain, err := NewChain("", "cscc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
 	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetChannels"})
 	if err != nil {
@@ -162,7 +162,7 @@ func (c *GoHlClient) GetChannels(certificate *Certificate, qPeer *Peer, mspId st
 
 // GetInstalledChainCodes returns list of chaincodes that are installed on peer.
 // Note that this list contains only chaincodes that are installed but not instantiated.
-func (c *GoHlClient) GetInstalledChainCodes(certificate *Certificate, qPeer *Peer, mspId string) (*peer.ChaincodeQueryResponse, error) {
+func (c *GohfcClient) GetInstalledChainCodes(certificate *Certificate, qPeer *Peer, mspId string) (*peer.ChaincodeQueryResponse, error) {
 	chain, err := NewChain("", "lccc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
 	prop, err := chain.CreateTransactionProposal(certificate, []string{"getinstalledchaincodes"})
 	if err != nil {
@@ -184,7 +184,7 @@ func (c *GoHlClient) GetInstalledChainCodes(certificate *Certificate, qPeer *Pee
 
 // GetChannelChainCodes returns list of chaincodes that are instantiated on peer.
 // Note that this list contains only chaincodes that are instantiated.
-func (c *GoHlClient) GetChannelChainCodes(certificate *Certificate, qPeer *Peer, channelName string, mspId string) (*peer.ChaincodeQueryResponse, error) {
+func (c *GohfcClient) GetChannelChainCodes(certificate *Certificate, qPeer *Peer, channelName string, mspId string) (*peer.ChaincodeQueryResponse, error) {
 	chain, err := NewChain(channelName, "lccc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
 	prop, err := chain.CreateTransactionProposal(certificate, []string{"getchaincodes"})
 	if err != nil {
@@ -206,7 +206,7 @@ func (c *GoHlClient) GetChannelChainCodes(certificate *Certificate, qPeer *Peer,
 
 // QueryTransaction will execute query over transaction id. If transaction is not found error is returned.
 // Note that this operation is executed on peer not on orderer.
-func (c *GoHlClient) QueryTransaction(certificate *Certificate, qPeer *Peer, channelName, txid string, mspId string) (*peer.ProcessedTransaction, *common.Payload, error) {
+func (c *GohfcClient) QueryTransaction(certificate *Certificate, qPeer *Peer, channelName, txid string, mspId string) (*peer.ProcessedTransaction, *common.Payload, error) {
 	chain, err := NewChain("", "qscc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
 	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetTransactionByID", channelName, txid})
 	if err != nil {
@@ -230,9 +230,8 @@ func (c *GoHlClient) QueryTransaction(certificate *Certificate, qPeer *Peer, cha
 	return transaction, payload, nil
 }
 
-
 // Instantiate instantiates already installed chaincode.
-func (c *GoHlClient) Instantiate(certificate *Certificate, chain *Chain, peer *Peer, orderer *Orderer, req *InstallRequest, policy *common.SignaturePolicyEnvelope) (*InvokeResponse, error) {
+func (c *GohfcClient) Instantiate(certificate *Certificate, chain *Chain, peer *Peer, orderer *Orderer, req *InstallRequest, policy *common.SignaturePolicyEnvelope) (*InvokeResponse, error) {
 
 	prop, err := chain.CreateInstantiateProposal(certificate, req, policy)
 	if err != nil {
@@ -241,21 +240,52 @@ func (c *GoHlClient) Instantiate(certificate *Certificate, chain *Chain, peer *P
 	rbb := chain.SendTransactionProposal(prop, []*Peer{peer})
 
 	result, err := chain.SendTransaction(certificate, rbb, []*Orderer{orderer})
-	if result!=nil{
-		return nil,err
+	if result != nil {
+		return nil, err
 	}
 	return result, nil
 }
 
 // RevokeCert revokes ECert on CA
-func (c *GoHlClient) RevokeCert(identity *Identity, reason int) (*CAResponse, error) {
+func (c *GohfcClient) RevokeCert(identity *Identity, reason int) (*CAResponse, error) {
 	aki := string(hex.EncodeToString(identity.Cert.AuthorityKeyId))
 	serial := identity.Cert.SerialNumber.String()
 	return c.CAClient.Revoke(identity.Certificate, &(RevocationRequest{AKI: aki, EnrollmentId: identity.EnrollmentId, Serial: serial, Reason: reason}))
 }
 
-// NewClientFromJSONConfig creates new GoHlClient from json config
-func NewClientFromJSONConfig(path string, kvStore KeyValueStore) (*GoHlClient, error) {
+// JoinChannel will join peers from peers slice to channel. If peer is already in channel error will be returned for
+// this particular peer, others will join channel.
+func (c *GohfcClient) JoinChannel(certificate *Certificate, channelName string,mspId string, peers []*Peer, pOrderer *Orderer) (*ProposalTransactionResponse, error) {
+	chain, err := NewChain("", "cscc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
+	if err != nil {
+		Logger.Errorf("Error creating new chain: %s", err)
+		return nil, err
+	}
+	prop, err := chain.CreateSeekProposal(certificate, peers, pOrderer, channelName, 0)
+	if err != nil {
+		return nil, err
+	}
+	block,err:=pOrderer.GetBlock(&common.Envelope{Payload:prop.Payload,Signature:prop.Proposal.Signature})
+	if err != nil {
+		return nil, err
+	}
+	//send proposal with block to peers
+	blockData, err := proto.Marshal(block.Block)
+	if err != nil {
+		Logger.Errorf("Error marshal orderer.DeliverResponse_Block: %s", err)
+		return nil, err
+	}
+
+	proposal, err := chain.CreateTransactionProposal(certificate, []string{"JoinChain", string(blockData)})
+	if err != nil {
+		return nil, err
+	}
+	r := chain.SendTransactionProposal(proposal, peers)
+	return r, nil
+}
+
+// NewClientFromJSONConfig creates new GohfcClient from json config
+func NewClientFromJSONConfig(path string, kvStore KeyValueStore) (*GohfcClient, error) {
 	config, err := NewConfigFromJSON(path)
 	if err != nil {
 		return nil, err
@@ -278,5 +308,5 @@ func NewClientFromJSONConfig(path string, kvStore KeyValueStore) (*GoHlClient, e
 	for _, orderer := range config.Orderers {
 		orderers = append(orderers, NewOrdererFromConfig(&orderer))
 	}
-	return &GoHlClient{Crypt: crypto, KVStore: kvStore, CAClient: caClient, Peers: peers, Orderers: orderers}, nil
+	return &GohfcClient{Crypt: crypto, KVStore: kvStore, CAClient: caClient, Peers: peers, Orderers: orderers}, nil
 }

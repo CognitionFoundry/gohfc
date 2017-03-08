@@ -39,7 +39,7 @@ func main() {
 
 }
 
-func query(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func query(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 
 	peers := []*gohfc.Peer{client.Peers[0]}
 	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", peer.ChaincodeSpec_GOLANG, client.Crypt)
@@ -56,7 +56,7 @@ func query(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
 
 }
 
-func install(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func install(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	installReq := &gohfc.InstallRequest{ChannelName: "myc1",
 		ChaincodeVersion:                       "0.1",
 		ChaincodeName:                          "mycc",
@@ -73,7 +73,7 @@ func install(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
 	fmt.Printf("Install result: %s\n", result)
 }
 
-func instantiate(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func instantiate(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	installReq := &gohfc.InstallRequest{ChannelName: "myc1",
 		ChaincodeVersion:                       "0.1",
 		ChaincodeName:                          "mycc",
@@ -95,7 +95,7 @@ func instantiate(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
 	fmt.Printf("Instantiate result: %s\n", result)
 }
 
-func invoke(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func invoke(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	peers := []*gohfc.Peer{client.Peers[0]}
 	orderers := []*gohfc.Orderer{client.Orderers[0]}
 
@@ -108,30 +108,30 @@ func invoke(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
 
 }
 
-func getChannels(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func getChannels(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	r,err:=client.GetChannels(certificate, client.Peers[0], "DEFAULT")
 	fmt.Println(err)
 	fmt.Println(r)
 }
-func getInstalledChainCodes(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func getInstalledChainCodes(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	r,err:=client.GetInstalledChainCodes(certificate, client.Peers[0], "DEFAULT")
 	fmt.Println(err)
 	fmt.Println(r.Chaincodes[0].Name)
 }
 
-func getChainCodes(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func getChainCodes(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	r,err:=client.GetChannelChainCodes(certificate, client.Peers[0], "myc1", "DEFAULT")
 	fmt.Println(err)
 	fmt.Println(r)
 }
-func queryTransaction(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func queryTransaction(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	transaction, payload, err := client.QueryTransaction(certificate, client.Peers[0], "myc1", "cba2c17f568c0e47769b07ef2c21558ca8d2752be045f30b7a45fb164b21bfef", "DEFAULT")
 	fmt.Println(transaction)
 	fmt.Println(payload)
 	fmt.Println(err)
 }
 
-func enroll(client *gohfc.GoHlClient) (*gohfc.Identity, error) {
+func enroll(client *gohfc.GohfcClient) (*gohfc.Identity, error) {
 	data, err := client.Enroll("admin", "adminpw")
 	if err != nil {
 		gohfc.Logger.Debugf("Error enroll %s", err)
@@ -140,7 +140,7 @@ func enroll(client *gohfc.GoHlClient) (*gohfc.Identity, error) {
 	return data, nil
 }
 
-func register(certificate *gohfc.Certificate, client *gohfc.GoHlClient) {
+func register(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	regReq := new(gohfc.RegistrationRequest)
 	regReq.EnrolmentId = "client1"
 	regReq.Type = "client"

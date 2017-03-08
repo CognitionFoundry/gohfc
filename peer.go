@@ -25,6 +25,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/protos/common"
+	"github.com/hyperledger/fabric/protos/orderer"
 )
 
 // Peer represents a single peer
@@ -44,6 +45,71 @@ type Orderer struct {
 	Url string
 	// Opts are grpc.DialOption that manage TlS verification, certificates and communication rules
 	Opts []grpc.DialOption
+}
+
+// Deliver delivers envelope to orderer for execution.
+// Note that this method return only result of the connection and sending the envelope. Actual result depends by
+// actual envelope and most of the times result will be send back as event.
+func (o *Orderer) Deliver(envelope *common.Envelope) (*orderer.BroadcastResponse,error){
+	conn, err := grpc.Dial(o.Url, o.Opts...)
+	if err != nil {
+		Logger.Errorf("Error connecting to orderer %s: %s", o.Name, err)
+		return nil, err
+	}
+	defer conn.Close()
+	client := orderer.NewAtomicBroadcastClient(conn)
+	bk, err := client.Broadcast(context.Background())
+	if err != nil {
+		Logger.Errorf("Error sendig transaction to orderer %s: %s", o.Name, err)
+		return nil, err
+	}
+	bk.Send(envelope)
+	reply, err := bk.Recv()
+	if err != nil {
+		Logger.Errorf("Error recv Response from orderer %s: %s", o.Name, err)
+		return nil, err
+	}
+	return reply,nil
+}
+
+// GetBlock gets block data for particular block. Actual block number and channel are defined in envelope message.
+// Note that this method blocks until all block data is received or error occurs.
+func (o *Orderer) GetBlock(envelope *common.Envelope) (*orderer.DeliverResponse_Block,error){
+	conn, err := grpc.Dial(o.Url, o.Opts...)
+	if err != nil {
+		Logger.Errorf("Error connecting to orderer %s: %s", o.Name, err)
+		return nil, err
+	}
+	defer conn.Close()
+	client, err := orderer.NewAtomicBroadcastClient(conn).Deliver(context.TODO())
+	if err != nil {
+		Logger.Errorf("Error connecting orderer %s error: %s", o.Name, err)
+		return nil, err
+	}
+
+	client.Send(envelope)
+	var block *orderer.DeliverResponse_Block
+L:
+	for {
+		msg, err := client.Recv()
+		if err != nil {
+			Logger.Errorf("Error recv data from orderer %s error: %s", o.Name, err)
+			return nil, err
+		}
+
+		switch t := msg.Type.(type) {
+		case *orderer.DeliverResponse_Status:
+			if t.Status != common.Status_SUCCESS {
+				Logger.Errorf("Delivery status from orderer %s is not 200: %s", o.Name, t.Status)
+				return nil, ErrBadTransactionStatus
+			}
+			continue
+		case *orderer.DeliverResponse_Block:
+			block = t
+			break L
+		}
+	}
+	return block,nil
 }
 
 // EventResponse is response from Event

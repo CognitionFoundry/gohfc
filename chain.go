@@ -115,6 +115,10 @@ func (c *Chain) CreateTransactionProposal(certificate *Certificate, args []strin
 		Version:                           1,
 		ChannelId:                         c.ChannelName}
 	nonce, err := GenerateRandomBytes(24)
+	if err != nil {
+		Logger.Errorf("Error generating nonce %s", err)
+		return nil, err
+	}
 	creator, err := proto.Marshal(&msp.SerializedIdentity{
 		Mspid:   c.MspId,
 		IdBytes: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Cert.Raw})})
@@ -353,27 +357,70 @@ func (c *Chain) SendTransaction(certificate *Certificate, transactionProp *Propo
 		return nil, err
 	}
 	//TODO if there are more than one orderer and connection to one fails try another.
-	conn, err := grpc.Dial(orderers[0].Url, orderers[0].Opts...)
-
-	if err != nil {
-		Logger.Errorf("Error connecting to orderer %s: %s", orderers[0].Name, err)
-		return nil, err
-	}
-	defer conn.Close()
-	client := orderer.NewAtomicBroadcastClient(conn)
-	bk, err := client.Broadcast(context.Background())
-	if err != nil {
-		Logger.Errorf("Error sendig transaction to orderer %s: %s", orderers[0].Name, err)
-		return nil, err
-	}
-	b := &common.Envelope{Payload: propBytes, Signature: psig}
-	bk.Send(b)
-	reply, err := bk.Recv()
+	reply, err := orderers[0].Deliver(&common.Envelope{Payload:propBytes,Signature:psig})
 	if err != nil {
 		Logger.Errorf("Error recv Response from orderer %s: %s", orderers[0].Name, err)
 		return nil, err
 	}
 	return &InvokeResponse{Status: reply.Status, TxID: transactionProp.TxId}, nil
+}
+
+//TODO probably TransactionProposal is not proper fot this
+func (c *Chain) CreateSeekProposal(certificate *Certificate, peers []*Peer, pOrderer *Orderer, channelName string, position uint64) (*TransactionProposal, error) {
+	seekInfo := &orderer.SeekInfo{
+		Start:    &orderer.SeekPosition{Type: &orderer.SeekPosition_Oldest{Oldest: &orderer.SeekOldest{}}},
+		Stop:     &orderer.SeekPosition{Type: &orderer.SeekPosition_Specified{Specified: &orderer.SeekSpecified{Number: position}}},
+		Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
+	}
+	mSeekInfo, err := proto.Marshal(seekInfo)
+	if err != nil {
+		Logger.Errorf("Error marshal orderer.SeekInfo: %s", err)
+		return nil, err
+	}
+	//header
+	nonce, err := GenerateRandomBytes(24)
+	if err != nil {
+		Logger.Errorf("Error generating nonce %s", err)
+		return nil, err
+	}
+	creator, err := proto.Marshal(&msp.SerializedIdentity{
+		Mspid:   c.MspId,
+		IdBytes: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Cert.Raw})})
+	if err != nil {
+		Logger.Errorf("Error marshal SerializedIdentity %s", err)
+		return nil, err
+	}
+	txId := c.GenerateTxId(nonce, creator)
+	channelHeader := &common.ChannelHeader{Type: int32(common.HeaderType_DELIVER_SEEK_INFO),
+		Version:                             1, ChannelId: channelName, TxId: txId}
+	comHeader, err := proto.Marshal(channelHeader)
+	if err != nil {
+		Logger.Errorf("Error marshal common.ChannelHeader: %s", err)
+		return nil, err
+	}
+	sigHeader, err := proto.Marshal(&common.SignatureHeader{Creator: creator, Nonce: nonce})
+	if err != nil {
+		Logger.Errorf("Error marshal common.SignatureHeader: %s", err)
+		return nil, err
+	}
+
+	header := &common.Header{ChannelHeader: comHeader, SignatureHeader: sigHeader}
+
+	payload, err := proto.Marshal(&common.Payload{Data: mSeekInfo, Header: header})
+	if err != nil {
+		Logger.Errorf("Error marshal common.Payload: %s", err)
+		return nil, err
+	}
+	sig, err := c.Crypto.Sign(payload, certificate.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	return &TransactionProposal{
+		Header:   header,
+		TxId:     txId,
+		Payload:  payload,
+		Proposal: &peer.SignedProposal{ProposalBytes: payload, Signature: sig}}, nil
+
 }
 
 // GenerateTxId generates transaction id for transaction.
@@ -527,11 +574,9 @@ func (i *InstallRequest) Validate() error {
 
 // NewChain creates new Chain
 func NewChain(channelName, chainCodeName, mspId string, chaincodeType peer.ChaincodeSpec_Type, crypto CryptSuite) (*Chain, error) {
-	if chainCodeName == "" {
-		return nil, ErrChainCodeNameEmpty
-	}
+
 	if mspId == "" {
-		return nil, ErrMspIdEmpty
+		mspId = "DEFAULT"
 	}
 	if _, ok := peer.ChaincodeSpec_Type_name[int32(chaincodeType)]; ok != true {
 		return nil, ErrInvalidChaincodeType

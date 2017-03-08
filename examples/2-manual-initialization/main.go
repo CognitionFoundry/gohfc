@@ -38,7 +38,7 @@ func main() {
 	orderer0 := &gohfc.Orderer{Name: "orderer0", Url: "localhost:7050", Opts: []grpc.DialOption{grpc.WithInsecure()}}
 	peers := []*gohfc.Peer{peer0, peer1}
 	orderers := []*gohfc.Orderer{orderer0}
-	client := &gohfc.GoHlClient{Crypt: crypto, KVStore: kvStore, CAClient: caClient, Peers: peers, Orderers: orderers}
+	client := &gohfc.GohfcClient{Crypt: crypto, KVStore: kvStore, CAClient: caClient, Peers: peers, Orderers: orderers}
 	client.Enroll("admin", "adminpw")
 	/////
 
