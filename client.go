@@ -18,17 +18,13 @@ package gohfc
 
 import (
 	"github.com/hyperledger/fabric/protos/common"
-	"github.com/hyperledger/fabric/protos/peer"
+	protoPeer "github.com/hyperledger/fabric/protos/peer"
 	"github.com/golang/protobuf/proto"
 	"encoding/hex"
+	"strconv"
 )
 
 //TODO create channel
-//TODO joinChannel
-//TODO queryInfo
-//TODO queryBlockByHash
-//TODO queryBlock
-//TODO queryTransaction
 
 // GohfcClient provides higher level API to execute different transactions and operations to fabric
 type GohfcClient struct {
@@ -140,8 +136,8 @@ func (c *GohfcClient) Install(certificate *Certificate, chain *Chain, peers []*P
 }
 
 // GetChannels returns a list of channels that peer has joined.
-func (c *GohfcClient) GetChannels(certificate *Certificate, qPeer *Peer, mspId string) (*peer.ChannelQueryResponse, error) {
-	chain, err := NewChain("", "cscc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
+func (c *GohfcClient) GetChannels(certificate *Certificate, qPeer *Peer, mspId string) (*protoPeer.ChannelQueryResponse, error) {
+	chain, err := NewChain("", "cscc", mspId, protoPeer.ChaincodeSpec_GOLANG, c.Crypt)
 	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetChannels"})
 	if err != nil {
 		return nil, err
@@ -153,7 +149,7 @@ func (c *GohfcClient) GetChannels(certificate *Certificate, qPeer *Peer, mspId s
 	if r.EndorsersResponse[0].Response.Response.Status != 200 {
 		return nil, ErrBadTransactionStatus
 	}
-	ch := new(peer.ChannelQueryResponse)
+	ch := new(protoPeer.ChannelQueryResponse)
 	if err := proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, ch); err != nil {
 		return nil, err
 	}
@@ -162,8 +158,8 @@ func (c *GohfcClient) GetChannels(certificate *Certificate, qPeer *Peer, mspId s
 
 // GetInstalledChainCodes returns list of chaincodes that are installed on peer.
 // Note that this list contains only chaincodes that are installed but not instantiated.
-func (c *GohfcClient) GetInstalledChainCodes(certificate *Certificate, qPeer *Peer, mspId string) (*peer.ChaincodeQueryResponse, error) {
-	chain, err := NewChain("", "lccc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
+func (c *GohfcClient) GetInstalledChainCodes(certificate *Certificate, qPeer *Peer, mspId string) (*protoPeer.ChaincodeQueryResponse, error) {
+	chain, err := NewChain("", "lccc", mspId, protoPeer.ChaincodeSpec_GOLANG, c.Crypt)
 	prop, err := chain.CreateTransactionProposal(certificate, []string{"getinstalledchaincodes"})
 	if err != nil {
 		return nil, err
@@ -175,7 +171,7 @@ func (c *GohfcClient) GetInstalledChainCodes(certificate *Certificate, qPeer *Pe
 	if r.EndorsersResponse[0].Response.Response.Status != 200 {
 		return nil, ErrBadTransactionStatus
 	}
-	ch := new(peer.ChaincodeQueryResponse)
+	ch := new(protoPeer.ChaincodeQueryResponse)
 	if err := proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, ch); err != nil {
 		return nil, err
 	}
@@ -184,8 +180,8 @@ func (c *GohfcClient) GetInstalledChainCodes(certificate *Certificate, qPeer *Pe
 
 // GetChannelChainCodes returns list of chaincodes that are instantiated on peer.
 // Note that this list contains only chaincodes that are instantiated.
-func (c *GohfcClient) GetChannelChainCodes(certificate *Certificate, qPeer *Peer, channelName string, mspId string) (*peer.ChaincodeQueryResponse, error) {
-	chain, err := NewChain(channelName, "lccc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
+func (c *GohfcClient) GetChannelChainCodes(certificate *Certificate, qPeer *Peer, channelName string, mspId string) (*protoPeer.ChaincodeQueryResponse, error) {
+	chain, err := NewChain(channelName, "lccc", mspId, protoPeer.ChaincodeSpec_GOLANG, c.Crypt)
 	prop, err := chain.CreateTransactionProposal(certificate, []string{"getchaincodes"})
 	if err != nil {
 		return nil, err
@@ -197,7 +193,7 @@ func (c *GohfcClient) GetChannelChainCodes(certificate *Certificate, qPeer *Peer
 	if r.EndorsersResponse[0].Response.Response.Status != 200 {
 		return nil, ErrBadTransactionStatus
 	}
-	ch := new(peer.ChaincodeQueryResponse)
+	ch := new(protoPeer.ChaincodeQueryResponse)
 	if err := proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, ch); err != nil {
 		return nil, err
 	}
@@ -206,8 +202,8 @@ func (c *GohfcClient) GetChannelChainCodes(certificate *Certificate, qPeer *Peer
 
 // QueryTransaction will execute query over transaction id. If transaction is not found error is returned.
 // Note that this operation is executed on peer not on orderer.
-func (c *GohfcClient) QueryTransaction(certificate *Certificate, qPeer *Peer, channelName, txid string, mspId string) (*peer.ProcessedTransaction, *common.Payload, error) {
-	chain, err := NewChain("", "qscc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
+func (c *GohfcClient) QueryTransaction(certificate *Certificate, qPeer *Peer, channelName, txid string, mspId string) (*protoPeer.ProcessedTransaction, *common.Payload, error) {
+	chain, err := NewChain("", "qscc", mspId, protoPeer.ChaincodeSpec_GOLANG, c.Crypt)
 	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetTransactionByID", channelName, txid})
 	if err != nil {
 		return nil, nil, err
@@ -219,7 +215,7 @@ func (c *GohfcClient) QueryTransaction(certificate *Certificate, qPeer *Peer, ch
 	if r.EndorsersResponse[0].Response.Response.Status != 200 {
 		return nil, nil, ErrBadTransactionStatus
 	}
-	transaction := new(peer.ProcessedTransaction)
+	transaction := new(protoPeer.ProcessedTransaction)
 	payload := new(common.Payload)
 	if err := proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, transaction); err != nil {
 		return nil, nil, err
@@ -255,8 +251,8 @@ func (c *GohfcClient) RevokeCert(identity *Identity, reason int) (*CAResponse, e
 
 // JoinChannel will join peers from peers slice to channel. If peer is already in channel error will be returned for
 // this particular peer, others will join channel.
-func (c *GohfcClient) JoinChannel(certificate *Certificate, channelName string,mspId string, peers []*Peer, pOrderer *Orderer) (*ProposalTransactionResponse, error) {
-	chain, err := NewChain("", "cscc", mspId, peer.ChaincodeSpec_GOLANG, c.Crypt)
+func (c *GohfcClient) JoinChannel(certificate *Certificate, channelName string, mspId string, peers []*Peer, pOrderer *Orderer) (*ProposalTransactionResponse, error) {
+	chain, err := NewChain("", "cscc", mspId, protoPeer.ChaincodeSpec_GOLANG, c.Crypt)
 	if err != nil {
 		Logger.Errorf("Error creating new chain: %s", err)
 		return nil, err
@@ -265,7 +261,7 @@ func (c *GohfcClient) JoinChannel(certificate *Certificate, channelName string,m
 	if err != nil {
 		return nil, err
 	}
-	block,err:=pOrderer.GetBlock(&common.Envelope{Payload:prop.Payload,Signature:prop.Proposal.Signature})
+	block, err := pOrderer.GetBlock(&common.Envelope{Payload: prop.Payload, Signature: prop.Proposal.Signature})
 	if err != nil {
 		return nil, err
 	}
@@ -282,6 +278,84 @@ func (c *GohfcClient) JoinChannel(certificate *Certificate, channelName string,m
 	}
 	r := chain.SendTransactionProposal(proposal, peers)
 	return r, nil
+}
+
+//QueryInfo gets blockchain data as current height, current hash and previous hash.
+func (c *GohfcClient) QueryInfo(certificate *Certificate, channelName string, mspId string, peer *Peer) (*common.BlockchainInfo, error) {
+	chain, err := NewChain(channelName, "qscc", mspId, protoPeer.ChaincodeSpec_GOLANG, c.Crypt)
+	if err != nil {
+		Logger.Errorf("Error creating new chain: %s", err)
+		return nil, err
+	}
+	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetChainInfo", channelName})
+	if err != nil {
+		return nil, err
+	}
+	r := chain.SendTransactionProposal(prop, []*Peer{peer})
+	if r.EndorsersResponse[0].Err != nil || r.EndorsersResponse[0].Response.Response.Status != 200 {
+		return nil, ErrBadTransactionStatus
+	}
+	var info = new(common.BlockchainInfo)
+	err = proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, info)
+	if err != nil {
+		Logger.Errorf("Error unmarshal common.BlockchainInfo: %s", err)
+		return nil, ErrBadTransactionStatus
+	}
+	return info, nil
+}
+
+//QueryBlockByHash returns data stored in block that is identified with provided hash.
+func (c *GohfcClient) QueryBlockByHash(certificate *Certificate, channelName, mspId, blockHash string, peer *Peer) (*common.Block, error) {
+	chain, err := NewChain(channelName, "qscc", mspId, protoPeer.ChaincodeSpec_GOLANG, c.Crypt)
+	if err != nil {
+		Logger.Errorf("Error creating new chain: %s", err)
+		return nil, err
+	}
+
+	decHash, err := hex.DecodeString(blockHash)
+	if err != nil {
+		Logger.Errorf("Error decode hex string: %s", err)
+		return nil, err
+	}
+	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetBlockByHash", channelName, string(decHash)})
+	if err != nil {
+		return nil, err
+	}
+	r := chain.SendTransactionProposal(prop, []*Peer{peer})
+	if r.EndorsersResponse[0].Err != nil || r.EndorsersResponse[0].Response.Response.Status != 200 {
+		return nil, ErrBadTransactionStatus
+	}
+	var block = new(common.Block)
+	err = proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, block)
+	if err != nil {
+		Logger.Errorf("Error unmarshal common.BlockchainInfo: %s", err)
+		return nil, ErrBadTransactionStatus
+	}
+	return block, nil
+}
+
+//QueryBlock returns data stored in block that is identified with provided number.
+func (c *GohfcClient) QueryBlock(certificate *Certificate, channelName, mspId string, blockNumber uint64, peer *Peer) (*common.Block, error) {
+	chain, err := NewChain(channelName, "qscc", mspId, protoPeer.ChaincodeSpec_GOLANG, c.Crypt)
+	if err != nil {
+		Logger.Errorf("Error creating new chain: %s", err)
+		return nil, err
+	}
+	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetBlockByNumber", channelName, strconv.FormatUint(blockNumber,10)})
+	if err != nil {
+		return nil, err
+	}
+	r := chain.SendTransactionProposal(prop, []*Peer{peer})
+	if r.EndorsersResponse[0].Err != nil || r.EndorsersResponse[0].Response.Response.Status != 200 {
+		return nil, ErrBadTransactionStatus
+	}
+	var block = new(common.Block)
+	err = proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, block)
+	if err != nil {
+		Logger.Errorf("Error unmarshal common.BlockchainInfo: %s", err)
+		return nil, ErrBadTransactionStatus
+	}
+	return block, nil
 }
 
 // NewClientFromJSONConfig creates new GohfcClient from json config
