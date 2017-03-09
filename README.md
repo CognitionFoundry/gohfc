@@ -24,7 +24,7 @@ go get github.com/op/go-logging
 go get golang.org/x/net/context 
 ```
 
-### Installation
+### Gohfc Installation
 ```
 go get github.com/CognitionFoundry/gohfc
 ```
