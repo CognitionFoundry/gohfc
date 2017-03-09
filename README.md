@@ -9,6 +9,8 @@ It gives you series of APIs that allow you to use Fabric using Go
 
 **Note:** This SDK is for Hyperledger Fabric v1, it is not compatible with v0.6
 
+**Note:** Current API design of Gohfc is not fully compliant with [Hyperledger Fabric SDK Design Specification v1.0](https://docs.google.com/document/d/1R5RtIBMW9fZpli37E5Li5_Q9ve3BnQ4q3gWmGZj6Sv4/edit#heading=h.kspvx6g87vie). Official specification API calls for HL 1.0 is in our road-map. This will be done by creating a layer over existing Gohfc API, but we will keep access to lower level API. We are waiting for at least RC version of HL.   
+
 ### Requirements
 * Go >=1.7
 * sha3
@@ -32,6 +34,7 @@ You must have running at least one CA, Peer and Orderer to be able to use this S
 
 For information how to install and run Fabric refer to [official documentation](http://hyperledger-fabric.readthedocs.io/en/latest/)
 
+Or if you want a quick Fabric setup guide look [Gohfc wiki](https://github.com/CognitionFoundry/gohfc/wiki/Hyperledger-Fabric-developer-setup) 
 ### TL;DR
 See examples folder
 ```
