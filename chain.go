@@ -29,7 +29,6 @@ import (
 	"github.com/hyperledger/fabric/protos/orderer"
 	"os"
 	"bytes"
-	"fmt"
 )
 
 // Chain implements main chaincode operations to peers and orderers.
@@ -313,7 +312,7 @@ func (c *Chain) SendTransaction(certificate *Certificate, transactionProp *Propo
 				pl = e.Response.Payload
 			}
 		} else {
-			Logger.Errorf("Peer return non 200 status: %d", e.Response.Response.Status)
+			Logger.Error("Peer return non 200 status")
 			return nil, ErrBadTransactionStatus
 		}
 		if bytes.Compare(pl, e.Response.Payload) != 0 {
@@ -377,7 +376,6 @@ func (c *Chain) SendTransaction(certificate *Certificate, transactionProp *Propo
 	return &InvokeResponse{Status: reply.Status, TxID: transactionProp.TxId}, nil
 }
 
-//TODO probably TransactionProposal is not proper fot this
 func (c *Chain) CreateSeekProposal(certificate *Certificate, peers []*Peer, pOrderer *Orderer, channelName string, position uint64) (*TransactionProposal, error) {
 	seekInfo := &orderer.SeekInfo{
 		Start:    &orderer.SeekPosition{Type: &orderer.SeekPosition_Oldest{Oldest: &orderer.SeekOldest{}}},

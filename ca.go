@@ -46,7 +46,7 @@ type CAClient interface {
 	// Revoke revokes ECert in fabric-ca server.
 	Revoke(certificate *Certificate, request *RevocationRequest) (*CAResponse, error)
 	// TCerts makes request to ca server for batch creation of TCerts.
-	TCerts(certificate *Certificate) ([]*Certificate, error)
+	TCerts(certificate *Certificate, request *TCertBatchRequest) ([]*Certificate, error)
 }
 
 // FabricCAClientImpl is client implementation for fabric-ca server
@@ -360,8 +360,7 @@ func (f *FabricCAClientImpl) Revoke(certificate *Certificate, request *Revocatio
 // attributes used in registration.
 // TCerts are processed to derive their private keys so anonymity is preserved and are not directly linked
 // to identity that creates them
-func (f *FabricCAClientImpl) TCerts(certificate *Certificate) ([]*Certificate, error) {
-	request := TCertBatchRequest{Count: 1, AttrNames: []string{"hf.Registrar.Roles"}, EncryptAttrs: true}
+func (f *FabricCAClientImpl) TCerts(certificate *Certificate,request *TCertBatchRequest) ([]*Certificate, error) {
 	reqJson, err := json.Marshal(request)
 	if err != nil {
 		Logger.Errorf("Error marshal registration request", err)
