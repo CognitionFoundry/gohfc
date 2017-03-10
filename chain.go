@@ -23,8 +23,6 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/msp"
 	"encoding/hex"
-	"google.golang.org/grpc"
-	"context"
 	"crypto/sha256"
 	"github.com/hyperledger/fabric/protos/orderer"
 	"os"
@@ -448,33 +446,13 @@ func (c *Chain) sendToPeers(peers []*Peer, prop *TransactionProposal) []*PeerRes
 	l := len(peers)
 	resp := make([]*PeerResponse, 0, l)
 	for _, p := range peers {
-		go c.sendToEndorser(ch, prop.Proposal, p)
+		go p.Endorse(ch, prop.Proposal)
 	}
 	for i := 0; i < l; i++ {
 		resp = append(resp, <-ch)
 	}
 	close(ch)
 	return resp
-}
-
-// sendToEndorser sends single transaction to single peer.
-func (c *Chain) sendToEndorser(resp chan *PeerResponse, prop *peer.SignedProposal, p *Peer) {
-	conn, err := grpc.Dial(p.Url, p.Opts...)
-	if err != nil {
-		Logger.Errorf("Error connecting to peer %s: %s", p.Name, err)
-		resp <- &PeerResponse{Response: nil, Err: err}
-		return
-	}
-	defer conn.Close()
-	client := peer.NewEndorserClient(conn)
-	proposalResp, err := client.ProcessProposal(context.Background(), prop)
-	if err != nil {
-		Logger.Errorf("Error getting response from peer %s: %s", p.Name, err)
-		resp <- &PeerResponse{Response: nil, Err: err}
-		return
-	}
-	resp <- &PeerResponse{Response: proposalResp, Err: nil}
-	return
 }
 
 // prepareInstallInstantiateTransaction creates protobuffer request for new chaincode installation or

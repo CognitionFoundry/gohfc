@@ -53,10 +53,10 @@ services:
         - /var/run/:/host/var/run/        
     networks:
       - bridge
-
+  ##### NOTE: make sure that ports 7055 and 7056 are exposed to host machine from VM
   # peer1:
   #   container_name: peer1
-  #   image: con-fabric-peer:latest
+  #   image: hyperledger/fabric-peer:latest
   #   environment:
   #     - CORE_PEER_ADDRESSAUTODETECT=true
   #     - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
@@ -81,7 +81,7 @@ services:
 
   # peer2:
   #   container_name: peer2
-  #   image: con-fabric-peer:latest
+  #   image: hyperledger/fabric-peer:latest
   #   environment:
   #     - CORE_PEER_ADDRESSAUTODETECT=true
   #     - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock

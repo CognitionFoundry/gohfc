@@ -178,10 +178,12 @@ func (p *Peer) Event(eventChan chan *EventResponse, doneChan chan bool) error {
 			in, err := cl.Recv()
 			if err == io.EOF {
 				close(eventChan)
+				conn.Close()
 				return
 			}
 			if err != nil {
 				close(eventChan)
+				conn.Close()
 				return
 			}
 			switch in.Event.(type) {
@@ -217,4 +219,24 @@ func (p *Peer) Event(eventChan chan *EventResponse, doneChan chan bool) error {
 		}
 	}()
 	return nil
+}
+
+// sendToEndorser sends single transaction to single peer.
+func (p *Peer) Endorse(resp chan *PeerResponse, prop *peer.SignedProposal) {
+	conn, err := grpc.Dial(p.Url, p.Opts...)
+	if err != nil {
+		Logger.Errorf("Error connecting to peer %s: %s", p.Name, err)
+		resp <- &PeerResponse{Response: nil, Err: err}
+		return
+	}
+	defer conn.Close()
+	client := peer.NewEndorserClient(conn)
+	proposalResp, err := client.ProcessProposal(context.Background(), prop)
+	if err != nil {
+		Logger.Errorf("Error getting response from peer %s: %s", p.Name, err)
+		resp <- &PeerResponse{Response: nil, Err: err}
+		return
+	}
+	resp <- &PeerResponse{Response: proposalResp, Err: nil}
+	return
 }
