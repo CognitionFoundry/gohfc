@@ -47,14 +47,6 @@ type PeerConf struct {
 	Insecure bool `json:"insecure"`
 }
 
-// EventPeerConf is configuration for peer that is used as event provider
-type EventPeerConf struct {
-	// URL is access point for peer
-	URL string `json:"url"`
-	// Insecure defines how communication to peer must be executed. If value is true all TLS validations will be skipped
-	Insecure bool `json:"insecure"`
-}
-
 // CryptConfig is configuration CryptSuite
 type CryptConfig struct {
 	// AsymmetricAlgoFamily define crypto family that will be used (ECDSA, RSA)
@@ -72,7 +64,7 @@ type Config struct {
 	CAServer  CAServerConf `json:"caServer"`
 	Orderers  []OrdererConf `json:"orderers"`
 	Peers     []PeerConf `json:"peers"`
-	EventPeer EventPeerConf `json:"eventPeer "`
+	EventPeer PeerConf `json:"eventPeer"`
 	Crypt     CryptConfig `json:"crypt"`
 }
 

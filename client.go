@@ -28,11 +28,12 @@ import (
 
 // GohfcClient provides higher level API to execute different transactions and operations to fabric
 type GohfcClient struct {
-	Crypt    CryptSuite
-	KVStore  KeyValueStore
-	CAClient CAClient
-	Peers    []*Peer
-	Orderers []*Orderer
+	Crypt     CryptSuite
+	KVStore   KeyValueStore
+	CAClient  CAClient
+	Peers     []*Peer
+	EventPeer *Peer
+	Orderers  []*Orderer
 }
 
 // QueryResponse is response from query transaction
@@ -341,7 +342,7 @@ func (c *GohfcClient) QueryBlock(certificate *Certificate, channelName, mspId st
 		Logger.Errorf("Error creating new chain: %s", err)
 		return nil, err
 	}
-	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetBlockByNumber", channelName, strconv.FormatUint(blockNumber,10)})
+	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetBlockByNumber", channelName, strconv.FormatUint(blockNumber, 10)})
 	if err != nil {
 		return nil, err
 	}
@@ -377,10 +378,10 @@ func NewClientFromJSONConfig(path string, kvStore KeyValueStore) (*GohfcClient, 
 	for _, peer := range config.Peers {
 		peers = append(peers, NewPeerFromConfig(&peer))
 	}
-
+	eventPeer := NewPeerFromConfig(&config.EventPeer)
 	orderers := make([]*Orderer, 0, len(config.Orderers))
 	for _, orderer := range config.Orderers {
 		orderers = append(orderers, NewOrdererFromConfig(&orderer))
 	}
-	return &GohfcClient{Crypt: crypto, KVStore: kvStore, CAClient: caClient, Peers: peers, Orderers: orderers}, nil
+	return &GohfcClient{Crypt: crypto, KVStore: kvStore, CAClient: caClient, Peers: peers, EventPeer: eventPeer, Orderers: orderers}, nil
 }
