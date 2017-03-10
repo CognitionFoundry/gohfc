@@ -28,6 +28,8 @@ import (
 	"crypto/sha256"
 	"github.com/hyperledger/fabric/protos/orderer"
 	"os"
+	"bytes"
+	"fmt"
 )
 
 // Chain implements main chaincode operations to peers and orderers.
@@ -301,13 +303,23 @@ func (c *Chain) SendTransactionProposal(proposal *TransactionProposal, peers []*
 // When Fabric releases stable version this behaviour will be revisited.
 func (c *Chain) SendTransaction(certificate *Certificate, transactionProp *ProposalTransactionResponse, orderers []*Orderer) (*InvokeResponse, error) {
 	var propResp *peer.ProposalResponse
+	var pl []byte
 	mEndorsements := make([]*peer.Endorsement, 0, len(transactionProp.EndorsersResponse))
 	for _, e := range transactionProp.EndorsersResponse {
 		if e.Err == nil && e.Response.Response.Status == 200 {
 			propResp = e.Response
 			mEndorsements = append(mEndorsements, e.Response.Endorsement)
+			if pl == nil {
+				pl = e.Response.Payload
+			}
+		} else {
+			Logger.Errorf("Peer return non 200 status: %d", e.Response.Response.Status)
+			return nil, ErrBadTransactionStatus
 		}
-		//TODO validate that all responses payload is same
+		if bytes.Compare(pl, e.Response.Payload) != 0 {
+			Logger.Error(ErrEndorsementsDoNotMatch)
+			return nil, ErrEndorsementsDoNotMatch
+		}
 	}
 
 	//at least one is OK
@@ -357,7 +369,7 @@ func (c *Chain) SendTransaction(certificate *Certificate, transactionProp *Propo
 		return nil, err
 	}
 	//TODO if there are more than one orderer and connection to one fails try another.
-	reply, err := orderers[0].Deliver(&common.Envelope{Payload:propBytes,Signature:psig})
+	reply, err := orderers[0].Deliver(&common.Envelope{Payload: propBytes, Signature: psig})
 	if err != nil {
 		Logger.Errorf("Error recv Response from orderer %s: %s", orderers[0].Name, err)
 		return nil, err

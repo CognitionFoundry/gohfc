@@ -31,7 +31,6 @@ var (
 	ErrNoValidEndorsementFound      = errors.New("Invocation was not endorced")
 	ErrChannelNameEmpty             = errors.New("Channel name cannot be empty")
 	ErrChainCodeNameEmpty           = errors.New("Chaincode name cannot be empty")
-	ErrMspIdEmpty                   = errors.New("Msp Id  cannot be empty")
 	ErrCertificateEmpty             = errors.New("Certificate cannot be nil")
 	ErrInvalidDataForParcelIdentity = errors.New("Invalid data for parsing identity")
 	ErrCAURLMissing                 = errors.New("CA url cannot be empty")
@@ -47,4 +46,5 @@ var (
 	ErrCipherIncorrectLength        = errors.New("Cipher lenght is not mutiple of block size")
 	ErrCipherIncorrectPadding       = errors.New("Cipher has incorect padding")
 	ErrCreatingTCerts               = errors.New("Error creating Tcerts")
+	ErrEndorsementsDoNotMatch       = errors.New("Endorsed responses are different")
 )
