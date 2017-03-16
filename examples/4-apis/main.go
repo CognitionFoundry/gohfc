@@ -4,7 +4,6 @@ import (
 	"github.com/CognitionFoundry/gohfc"
 	"fmt"
 	"os"
-	"github.com/hyperledger/fabric/protos/peer"
 )
 
 func main() {
@@ -42,7 +41,7 @@ func main() {
 func query(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 
 	peers := []*gohfc.Peer{client.Peers[0]}
-	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", peer.ChaincodeSpec_GOLANG, client.Crypt)
+	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", gohfc.ChaincodeSpec_GOLANG, client.Crypt)
 	if err != nil {
 		gohfc.Logger.Debugf("Error creating chain %s", err)
 		return
@@ -62,7 +61,7 @@ func install(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 		ChaincodeName:                          "mycc",
 		Namespace:                              "github.com/foo/bar/chaincode/",
 		SrcPath:                                "/path/to/chaincode/src"}
-	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", peer.ChaincodeSpec_GOLANG, client.Crypt)
+	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", gohfc.ChaincodeSpec_GOLANG, client.Crypt)
 	peers := []*gohfc.Peer{client.Peers[0]}
 	if err != nil {
 		gohfc.Logger.Debugf("Error creating chain %s", err)
@@ -80,7 +79,7 @@ func instantiate(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 		Namespace:                              "github.com/foo/bar/chaincode/",
 		SrcPath:                                "/path/to/chaincode/src/",
 		Args:                                   []string{"init", "a", "100", "b", "200"}}
-	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", peer.ChaincodeSpec_GOLANG, client.Crypt)
+	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", gohfc.ChaincodeSpec_GOLANG, client.Crypt)
 	if err != nil {
 		gohfc.Logger.Debugf("Error creating chain %s", err)
 		return
@@ -99,7 +98,7 @@ func invoke(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 	peers := []*gohfc.Peer{client.Peers[0]}
 	orderers := []*gohfc.Orderer{client.Orderers[0]}
 
-	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", peer.ChaincodeSpec_GOLANG, client.Crypt)
+	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", gohfc.ChaincodeSpec_GOLANG, client.Crypt)
 	if err != nil {
 		gohfc.Logger.Debugf("Error creating chain %s", err)
 		return
@@ -155,5 +154,5 @@ func register(certificate *gohfc.Certificate, client *gohfc.GohfcClient) {
 		gohfc.Logger.Debugf("Error registering %s", err)
 		return
 	}
-	gohfc.Logger.Debugf("User registration successfull! Password is: %s", enr_pass.Result.Credential)
+	gohfc.Logger.Debugf("User registration successfull! Password is: %s", enr_pass.Result.Secret)
 }

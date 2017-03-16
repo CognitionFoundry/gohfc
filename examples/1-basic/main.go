@@ -4,7 +4,6 @@ import (
 	"github.com/CognitionFoundry/gohfc"
 	"fmt"
 	"os"
-	"github.com/hyperledger/fabric/protos/peer"
 )
 
 func main() {
@@ -27,7 +26,7 @@ func main() {
 
 	peers := []*gohfc.Peer{client.Peers[0]}
 
-	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", peer.ChaincodeSpec_GOLANG, client.Crypt)
+	chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", gohfc.ChaincodeSpec_GOLANG, client.Crypt)
 	if err != nil {
 		gohfc.Logger.Debugf("Erro creating chain %s", err)
 		return

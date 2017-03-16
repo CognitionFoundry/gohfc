@@ -29,6 +29,16 @@ import (
 	"bytes"
 )
 
+type ChaincodeType int32
+
+const (
+	ChaincodeSpec_UNDEFINED ChaincodeType = 0
+	ChaincodeSpec_GOLANG    ChaincodeType = 1
+	ChaincodeSpec_NODE      ChaincodeType = 2
+	ChaincodeSpec_CAR       ChaincodeType = 3
+	ChaincodeSpec_JAVA      ChaincodeType = 4
+)
+
 // Chain implements main chaincode operations to peers and orderers.
 type Chain struct {
 	// ChannelName is channel name over which operations will be executed.
@@ -39,7 +49,7 @@ type Chain struct {
 	// Default MspId in peers is DEFAULT (case sensitive)
 	MspId string
 	// ChaincodeType identifies language of the chaincode (go, java...)
-	ChaincodeType peer.ChaincodeSpec_Type
+	ChaincodeType ChaincodeType
 	// Crypto is CryptSuite implementation used to sign and verify transactions to peers and orderers.
 	Crypto CryptSuite
 }
@@ -106,7 +116,7 @@ func (c *Chain) CreateTransactionProposal(certificate *Certificate, args []strin
 	}
 
 	chaincodeSpec := new(peer.ChaincodeSpec)
-	chaincodeSpec.Type = c.ChaincodeType
+	chaincodeSpec.Type = peer.ChaincodeSpec_Type(c.ChaincodeType)
 	chaincodeSpec.ChaincodeId = &peer.ChaincodeID{Name: c.ChainCodeName}
 	chaincodeSpec.Input = &peer.ChaincodeInput{Args: toChaincodeArgs(args)}
 
@@ -561,7 +571,7 @@ func (i *InstallRequest) Validate() error {
 }
 
 // NewChain creates new Chain
-func NewChain(channelName, chainCodeName, mspId string, chaincodeType peer.ChaincodeSpec_Type, crypto CryptSuite) (*Chain, error) {
+func NewChain(channelName, chainCodeName, mspId string, chaincodeType ChaincodeType, crypto CryptSuite) (*Chain, error) {
 
 	if mspId == "" {
 		mspId = "DEFAULT"

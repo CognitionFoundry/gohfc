@@ -161,7 +161,7 @@ type enrollmentResponseResult struct {
 
 type enrollmentResponseServerInfo struct {
 	CAName string
-	CACjain string
+	CAChain string
 }
 
 // cATCertsResponse represent response for TCerts generations from fabric-ca server
