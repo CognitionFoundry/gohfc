@@ -26,6 +26,8 @@ services:
     command: orderer
     ports:
       - 7050:7050
+    volumes:        
+        - ./orderer-config.yaml:/etc/hyperledger/fabric/orderer.yaml 
     networks:
       - bridge
 
@@ -50,10 +52,11 @@ services:
     links:
       - orderer:orderer
     volumes:
-        - /var/run/:/host/var/run/        
+        - /var/run/:/host/var/run/
+        - ./peer-core.yaml:/etc/hyperledger/fabric/core.yaml   
     networks:
       - bridge
-  ##### NOTE: make sure that ports 7055 and 7056 are exposed to host machine from VM
+
   # peer1:
   #   container_name: peer1
   #   image: hyperledger/fabric-peer:latest
@@ -75,7 +78,8 @@ services:
   #     - orderer:orderer
   #     - peer0:peer0
   #   volumes:
-  #       - /var/run/:/host/var/run/        
+  #       - /var/run/:/host/var/run/  
+  #       - ./peer-core.yaml:/etc/hyperledger/fabric/core.yaml   
   #   networks:
   #     - bridge
 
@@ -101,6 +105,7 @@ services:
   #     - peer0:peer0
   #     - peer1:peer1
   #   volumes:
-  #       - /var/run/:/host/var/run/        
+  #       - /var/run/:/host/var/run/    
+  #       - ./peer-core.yaml:/etc/hyperledger/fabric/core.yaml   
   #   networks:
   #     - bridge  

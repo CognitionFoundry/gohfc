@@ -123,7 +123,7 @@ type CAResponse struct {
 
 // CARegisterCredentialResponse credentials from fabric-ca server registration request
 type CARegisterCredentialResponse struct {
-	Credential string `json:"credential"`
+	Secret string `json:"secret"`
 }
 
 // RevocationRequest holds data needed to revoke certificate in fabric-ca
@@ -149,9 +149,19 @@ type certificateRequest struct {
 // enrollmentResponse is response from fabric-ca server for enrolment that contains created Ecert
 type enrollmentResponse struct {
 	Success     bool `json:"success"`
-	RawResponse string `json:"result"`
+	Result enrollmentResponseResult `json:"result"`
 	Errors      []CAResponseErr `json:"errors"`
 	Messages    []string `json:"messages"`
+}
+
+type enrollmentResponseResult struct {
+	Cert string
+	ServerInfo enrollmentResponseServerInfo
+}
+
+type enrollmentResponseServerInfo struct {
+	CAName string
+	CACjain string
 }
 
 // cATCertsResponse represent response for TCerts generations from fabric-ca server
@@ -227,7 +237,7 @@ func (f *FabricCAClientImpl) Enroll(enrollmentId, password string) (*Identity, e
 		return nil, err
 	}
 	enrResp := new(enrollmentResponse)
-	if json.Unmarshal(body, enrResp) != nil {
+	if err:=json.Unmarshal(body, enrResp);err != nil {
 		Logger.Errorf("Error unmarshal CA Response %s", err)
 		return nil, err
 	}
@@ -235,7 +245,7 @@ func (f *FabricCAClientImpl) Enroll(enrollmentId, password string) (*Identity, e
 		Logger.Errorf("User enrolment failed %s", enrResp.Errors)
 		return nil, ErrEnrollment
 	}
-	rawCert, err := base64.StdEncoding.DecodeString(enrResp.RawResponse)
+	rawCert, err := base64.StdEncoding.DecodeString(enrResp.Result.Cert)
 	if err != nil {
 		Logger.Errorf("Error encode raw certificate %s", err)
 		return nil, err
@@ -297,7 +307,6 @@ func (f *FabricCAClientImpl) Register(certificate *Certificate, req *Registratio
 	defer resp.Body.Close()
 
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(body))
 	result := new(CAResponse)
 	if err := json.Unmarshal(body, result); err != nil {
 		Logger.Errorf("Error unmarshal CAResponse %s", err)
