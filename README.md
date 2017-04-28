@@ -1,6 +1,9 @@
 ## Gohfc (Golang Hyperledger Fabric)
 Gohfc is pure Go SDK for [Hyperledger Fabric](https://github.com/hyperledger/fabric)
 
+**Because Fabric is developed so rapidly we will wait for stable version before updating this SDK.**
+**Currently this SDK is not compatible with latest Fabric master branch**
+
 It gives you series of APIs that allow you to use Fabric using Go
 
 **Note:** This is an alpha SDK over alpha software. If something can go wrong, it will go wrong! Breaking API changes are more than expected at this stage of development!
