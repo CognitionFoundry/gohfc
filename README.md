@@ -40,6 +40,8 @@ For information how to install and run Fabric refer to [official documentation](
 Or if you want a quick Fabric setup guide look [Gohfc wiki](https://github.com/CognitionFoundry/gohfc/wiki/Hyperledger-Fabric-developer-setup) 
 ### TL;DR
 See examples folder
+
+Or you can see couple of [short video tutorials](https://www.youtube.com/playlist?list=PLjsqymUqgpSRaMGLj1JO3gXiyra-3e8yX) how to setup Hyperledger fabric and us Gohfc 
 ```
 package main
 

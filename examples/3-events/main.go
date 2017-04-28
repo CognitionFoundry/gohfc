@@ -28,7 +28,7 @@ func main() {
 	eventChan := make(chan *gohfc.EventResponse)
 	doneChan := make(chan bool)
 
-	client.Peers[0].Event(eventChan, doneChan)
+	client.EventPeer.Event(eventChan, doneChan)
 	go func() {
 		for v := range eventChan {
 			fmt.Println("Event recieved")
