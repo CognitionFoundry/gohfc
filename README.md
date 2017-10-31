@@ -137,6 +137,7 @@ if err != nil {
 
 ### Register
 ```
+// identity is identity obtainet from Enroll. This identity must have the abiility to register new users.
 rr := gohfc.CARegistrationRequest{EnrolmentId: "username", Secret: "qwerty", Affiliation: "org1", Type: "user"}
 resp, err := ca.Register(identity, &rr)
 if err != nil {
