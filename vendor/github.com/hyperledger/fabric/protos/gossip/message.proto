@@ -1,3 +1,7 @@
+// Copyright IBM Corp. All Rights Reserved.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
 syntax = "proto3";
 
 option go_package = "github.com/hyperledger/fabric/protos/gossip" ;
@@ -23,7 +27,7 @@ service Gossip {
 message Envelope {
     bytes payload   = 1;
     bytes signature = 2;
-    SecretEnvelope secretEnvelope = 3;
+    SecretEnvelope secret_envelope = 3;
 }
 
 // SecretEnvelope is a marshalled Secret
@@ -121,7 +125,12 @@ message GossipMessage {
 message StateInfo {
     bytes metadata     = 1;
     PeerTime timestamp = 2;
-    bytes pki_id        = 3;
+    bytes pki_id       = 3;
+
+    // channel_MAC is an authentication code that proves
+    // that the peer that sent this message knows
+    // the name of the channel.
+    bytes channel_MAC  = 4;
 }
 
 // StateInfoSnapshot is an aggregation of StateInfo messages
@@ -132,16 +141,19 @@ message StateInfoSnapshot {
 // StateInfoPullRequest is used to fetch a StateInfoSnapshot
 // from a remote peer
 message StateInfoPullRequest {
-
+    // channel_MAC is an authentication code that proves
+    // that the peer that sent this message knows
+    // the name of the channel.
+    bytes channel_MAC  = 1;
 }
 
 // ConnEstablish is the message used for the gossip handshake
 // Whenever a peer connects to another peer, it handshakes
 // with it by sending this message that proves its identity
 message ConnEstablish {
-    bytes pki_id = 1;
-    bytes cert  = 2;
-    bytes hash  = 3;
+    bytes pki_id          = 1;
+    bytes identity        = 2;
+    bytes tls_cert_hash   = 3;
 }
 
 // PeerIdentity defines the identity of the peer
@@ -177,7 +189,7 @@ message GossipHello {
     PullMsgType msg_type = 3;
 }
 
-// DataUpdate is the the final message in the pull phase
+// DataUpdate is the final message in the pull phase
 // sent from the receiver to the initiator
 message DataUpdate {
     uint64 nonce                = 1;
@@ -204,8 +216,7 @@ message DataMessage {
 // Payload contains a block
 message Payload {
     uint64  seq_num = 1;
-    string  hash    = 2;
-    bytes   data    = 3;
+    bytes   data    = 2;
 }
 
 
@@ -229,8 +240,8 @@ message LeadershipMessage {
 
 // PeerTime defines the logical time of a peer's life
 message PeerTime {
-    uint64 inc_number = 1;
-    uint64 seq_num    = 2;
+    uint64 inc_num = 1;
+    uint64 seq_num = 2;
 }
 
 // MembershipRequest is used to ask membership information
@@ -264,7 +275,8 @@ message Empty {}
 // RemoteStateRequest is used to ask a set of blocks
 // from a remote peer
 message RemoteStateRequest {
-    repeated uint64 seq_nums = 1;
+    uint64 start_seq_num = 1;
+    uint64 end_seq_num = 2;
 }
 
 // RemoteStateResponse is used to send a set of blocks

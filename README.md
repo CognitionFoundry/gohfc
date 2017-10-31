@@ -1,207 +1,371 @@
-## Gohfc (Golang Hyperledger Fabric)
-Gohfc is pure Go SDK for [Hyperledger Fabric](https://github.com/hyperledger/fabric)
+#GOHFC - Golang Hyperledger Fabric Client
 
-**Because Fabric is developed so rapidly we will wait for stable version before updating this SDK.**
-**Currently this SDK is not compatible with latest Fabric master branch**
+This is SDK for Hyperledger Fabric written in pure Golang using minimum requirements.
+This is not official SDK and does not follow official SDK API guidelines provided by Hyperledger team.
+For the list of official SDK's refer to the official Hyperledger documentation.
 
-It gives you series of APIs that allow you to use Fabric using Go
+It is designed to be easy to use and to be fast as possible. Currently, it outperforms the official Go SDK by far.
 
-**Note:** This is an alpha SDK over alpha software. If something can go wrong, it will go wrong! Breaking API changes are more than expected at this stage of development!
- 
-**Note:** This is not an official Hyperledger Fabric SDK. For official SDKs see the [official documentation](http://hyperledger-fabric.readthedocs.io/en/latest/)  
+We are using it in our production applications, but no guarantees are provided.
 
-**Note:** This SDK is for Hyperledger Fabric v1, it is not compatible with v0.6
+This version will be updated and supported, so pull requests and reporting any issues are more than welcome.
 
-**Note:** Current API design of Gohfc is not fully compliant with [Hyperledger Fabric SDK Design Specification v1.0](https://docs.google.com/document/d/1R5RtIBMW9fZpli37E5Li5_Q9ve3BnQ4q3gWmGZj6Sv4/edit#heading=h.kspvx6g87vie). Official specification API calls for HL 1.0 is in our road-map. This will be done by creating a layer over existing Gohfc API, but we will keep access to lower level API. We are waiting for at least RC version of HL.   
+## Dependency
 
-### Requirements
-* Go >=1.7
-* sha3
-* grpc
-* protobuf
-* go-logging
-* context (if using go 1.7. Not needed for go >=1.8)
 ```
-go get golang.org/x/crypto/sha3
-go get google.golang.org/grpc
+go get -u golang.org/x/crypto/sha3
+go get -u google.golang.org/grpc
 go get -u github.com/golang/protobuf/{proto,protoc-gen-go}
-go get github.com/op/go-logging
-go get golang.org/x/net/context 
-```
-
-### Gohfc Installation
-```
-go get github.com/CognitionFoundry/gohfc
-```
-You must have running at least one CA, Peer and Orderer to be able to use this SDK.
-
-For information how to install and run Fabric refer to [official documentation](http://hyperledger-fabric.readthedocs.io/en/latest/)
-
-Or if you want a quick Fabric setup guide look [Gohfc wiki](https://github.com/CognitionFoundry/gohfc/wiki/Hyperledger-Fabric-developer-setup) 
-### TL;DR
-See examples folder
-
-Or you can see couple of [short video tutorials](https://www.youtube.com/playlist?list=PLjsqymUqgpSRaMGLj1JO3gXiyra-3e8yX) how to setup Hyperledger fabric and us Gohfc 
-```
-package main
-
-import (
-	"github.com/CognitionFoundry/gohfc"
-	"fmt"
-	"os"
-	"github.com/hyperledger/fabric/protos/peer"
-)
-
-func main() {
-    kvsore, err := gohfc.NewFileKeyValue("./kvstore")
-    if err != nil {
-        fmt.Printf("Error creating kvstore %s\n", err)
-        os.Exit(1)
-    }
-    client, err := gohfc.NewClientFromJSONConfig("./config.json", kvsore)
-    if err != nil {
-        fmt.Printf("Error creating client %s\n", err)
-        os.Exit(1)
-    }
-    identity, err := client.Enroll("admin", "adminpw")
-    if err != nil {
-        fmt.Printf("Error enrolling client %s\n", err)
-        os.Exit(1)
-    }
-    peers := []*gohfc.Peer{client.Peers[0]}    
-    chain, err := gohfc.NewChain("myc1", "mycc", "DEFAULT", peer.ChaincodeSpec_GOLANG, client.Crypt)
-    if err != nil {
-        fmt.Printf("Error creating chain %s\n", err)
-        return
-    }
-    r,err:=client.Query(identity.Certificate, chain, peers, []string{"query", "a"})
-    if err!=nil{
-        fmt.Printf("Error quering %s\n", err)
-        os.Exit(1)
-    }
-    fmt.Println(string(r.Response[0].Response.Response.Payload))
-}
-```
-### Architecture
-Gohfc is composed of series of APIs that do not enforce specific workflow. Users can use higher level APIs provided by gohfc.Client, or can access lower level APIs provided by different components to create specific transaction, do custom validation or any other logic.
-
-Gohfc is designed for expandability, thus users can extend CA, Crypto and Key-Value store components.
-
-Here is a general description for different components and their responsibilities.
-
-#### CAClient 
-Certificate authority (CA) is responsible for creating and revoking certificates (ECert or TCert)
-
-Current Gohfc SDK has implementation only for [fabric-ca](https://github.com/hyperledger/fabric-ca) but using other CA is possible. Users must implement CAClient interface
-``` 
-type CAClient interface {
-	Enroll(enrollmentId, password string) (*Identity, error)
-	Register(certificate *Certificate, req *RegistrationRequest) (*CAResponse, error)
-	Revoke(certificate *Certificate, request *RevocationRequest) (*CAResponse, error)
-	TCerts(certificate *Certificate) ([]*Certificate, error)
-}
-```
-#### Chain
-Chain is responsible for almost all operations in Fabric. Creating transactions, endorsing transactions, install and instantiate chain codes etc...
- 
-Chain is defined by Chanel name, Chaincode name and MspId.
-
-If you are running default Fabric setup MspId is always "DEFAULT" (case sensitive)
-
-#### Client 
-Client component is higher level APIs build on top of Chain component that simplify common operations like enrolment, query, invoke, install etc.
-
-#### Key-Value store
-Key-value store is used to keep long-term data from enrollments (ECerts). It must be persistent and secure because certificates with their private keys are stored inside.
-Users can use any technology for storage by implementing simple interface:
-```
-type KeyValueStore interface {
-	Get(key string) (string, bool, error)
-	Set(key string, value string) error
-	Delete(key string) error
-}
-```
-
-Gohfc currently provide 3 implementations:
-
-* MemoryKeyValue - data is stored in memory and is destroyed when app is stopped
-* DummyKeyValue - no data is stored at all
-* FileKeyValue - data is stored in file system as text file. This implementation do not scale efficiently
-
-For production use is highly recommended to use proper secure scalable storage like database.
-
-#### Crypto
-Crypto provide necessary cryptographic functionality to generate private keys, certificates, hashing and signing messages.
-
-Currently Fabric (and gohfc) supports (by default) Elliptic curves and RSA but custom crypto suites can be implemented in fabric and gohfc.
- 
-For custom crypto implementation users must implement this interface:
+go get -u gopkg.in/yaml.v2
 
 ```
-type CryptSuite interface {
-	GenerateKey() (interface{}, error)	
-	CreateCertificateRequest(enrolmentId string, key interface{}) ([]byte, error)	
-	Sign(msg []byte, key interface{}) ([]byte, error)	
-	CASign(msg []byte, key interface{}) ([]byte, error)	
-	Hash(data []byte) ([]byte)
-}
+
+## Fabric sample config
 ```
 
-**Note:** Fabric is not completely ready with RSA implementation. Avoid using it for now!
+---
+crypto:
+  family: ecdsa
+  algorithm: P256-SHA256
+  hash: SHA2-256
+orderers:
+  orderer0:
+    host: orderer.example.com:7050
+    insecure: false
+    tlsPath: ./crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt
+peers:
+  peer0:
+    host: peer0.org1.example.com:7051
+    insecure: false
+    tlsPath: ./crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/server.crt
+  peer1:
+    host: peer1.org1.example.com:8051
+    insecure: false
+    tlsPath: ./crypto-config/peerOrganizations/org1.example.com/peers/peer1.org1.example.com/tls/server.crt
+eventPeers:
+  peer0:
+    host: peer0.org1.example.com:7053
+    insecure: false
+    tlsPath: ./crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/server.crt
 
-**Note:** Fabric and gohfc crypto settings must match.
+```
 
-Available crypto options are shown in the table bellow:
+## Fabric-ca sample config
+```
 
+---
+url: http://127.0.0.1:7054
+skipTLSValidation: true
+crypto:
+  family: ecdsa
+  algorithm: P256-SHA256
+  hash: SHA2-256
 
+```
+
+### Available cryptographic algorithms
 | Family   | Algorithm   | Description                                      | 
 |:--------:|:-----------:|--------------------------------------------------| 
 | ecdsa    | P256-SHA256 | Elliptic curve is P256 and signature uses SHA256 |
 | ecdsa    | P384-SHA384 | Elliptic curve is P384 and signature uses SHA384 |
 | ecdsa    | P521-SHA512 | Elliptic curve is P521 and signature uses SHA512 |
-| rsa      | 2048-SHA256 | Key length is 2048 and signature uses SHA256     |
-| rsa      | 4096-SHA512 | Key length is 4096 and signature uses SHA512     |
+| rsa      | ----        | RSA is not supported (for now) in Fabric         |
 
-Available hashing options are shown in table below
+### Hash
 
-| Family   | Size | 
-|:--------:|:----:| 
-| SHA2     | 256  |
-| SHA2     | 384  |
-| SHA3     | 256  |
-| SHA3     | 384  |
+| Family    | 
+|:----------| 
+| SHA2-256  |
+| SHA2-384  |
+| SHA3-256  |
+| SHA3-384  |
 
-#### Config
-Config facilitate creating necessary structures from JSON file using:
+## Basic concepts
+Clients (fabric and CA) can be initialized from config file with a simple call, but the user can create the config "manually" and then create
+the clients from this config. Useful if you are not using YAML files or configuration is located in other places.
 
-`gohfc.NewConfigFromJSON("path/to/config.json")`
+CAClient is responsible for issuing certificates, registering users and revoking certificates.
+If you are using another system for certificates this client can be omitted. 
+In this case, your certificates must be put in `gohfc.Identity` struct.Gohfc has helper function `LoadCertFromFile` for this task.
 
-Users can create different configuration schemes (yaml, ini, database etc...) and the result must be a valid **Config** struct type with valid values.
+FabricClient is used for practically any interaction with Fabric.
 
-Actually, config is not even necessary because users can instantiate any component manually (see examples folder) 
+Most of the operations require transactions to be sent to specific peers or orderer.
+FabricClient methods accept the name (as string) for the peer or order as they are specified in config file.
+In many situations, it is not necessary to send requests to all peers and orderers.
 
-**Note:** currently **http.transport** is not in config so if users want to communicate using proxy and/or some specific TLS setup must manually provide **http.Transport** options
-  
-#### Peer
+When installing chaincode user must provide the path for the chaincode and namespace.
+So if chaincode source is `/some/path/chaincode1` and namespace is `/org/org1/chaincode1` all files and sub folders under
+`/some/path/chaincode1` will be added to the archive in folder `/org/org1/chaincode1`.
+This is done so gohfc will not have an external dependency on GOPATH, and will allow more flexible operations in future.
+Especially when nodejs and Java based chaincode are supported (in v.1.1 probably) 
 
-Peer is used to identify uniquely different peers,their settings and allows registering an event listener.
 
-### Limitations
+## TODO
+- Transaction decoding from the block is not implemented yet. So QueryTransaction and other functions for history will not return unmarshaled block data.
+- Implement get block by number
+- Better error responses and logging capabilities.
+- Support Fabric 1.1 (when fabric 1.1 is released)
+- Add the ability to specify a policy for instantiation, for now, the default policy is used. If this is critical, user can instantiate chaincode from peer CLI
+- Add support for java and nodejs chaincode when Fabric add them officially as supported languages
 
-Currently Gohfc and Hyperledger Fabric are in very intensive development so not all functionality is implemented or stable.
+### Init clients
+```
+c, err := gohfc.NewFabricClient("./client.yaml")
+if err != nil {
+    fmt.Printf("Error loading file: %v", err)
+    os.Exit(1)
+}
 
-Here is a list of some of the main limitations:
+ca, err := gohfc.NewCAClient("./ca.yaml", nil)
+if err != nil {
+    fmt.Println(err)
+    os.Exit(1)
+}
+```
 
-* TCerts are not working as expected. Waiting for final/stable Fabric implementation. 
-* Only event sent from Fabric is for Block type. There is no way to get event for rejected transactions. This will be fixed in final version. For now users must relay on timeout to catch rejected transactions.
-* RSA implementation is not complete and stable. Avoid using it for now.
-* Logging logs only errors. 
-* Creating new channel is not possible using gohfc. Channel creation must be done using CLI from Fabric containers.
-* Chaincode deployed using gohfc must be written in Go. Other languages (Java and CAR) will be added later. Gohfc can work with chaincode written in other languages but chaincode must be installed using CLI or other SDK.
-* Some of the APIs need refactoring.
-* Grpc connection is established and closed on every transaction. In future version permanent connections and mechanism to control them will be added.
-* Will be good to provide some functionality to manage chains in more flexible way.  
+gohfc.NewCAClient accept *http.Transport as second parameter.
 
-## License <a name="license"></a>
-The Gohfc Project uses the [Apache License Version 2.0](LICENSE) software
-license.
+### Enroll
+```
+identity, _, err := ca.Enroll("admin", "adminpw")
+if err != nil {
+    fmt.Println(err)
+    os.Exit(1)
+}
+```
+
+### Register
+```
+rr := gohfc.CARegistrationRequest{EnrolmentId: "username", Secret: "qwerty", Affiliation: "org1", Type: "user"}
+resp, err := ca.Register(identity, &rr)
+if err != nil {
+    fmt.Println(err)
+}
+```
+
+### Create channel
+```
+// create channel require admin certificate.LoadCertFromFile is helper function that takes path for public and private keys
+// and loads them for use.
+
+pk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/admincerts/Admin@org1.example.com-cert.pem"
+sk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/27c48b5b7bc5befba6720f196bc0ad3d0cbdbc51f7555933b124c97d6373fdbc_sk"
+channelFile:="./channel-artifacts/channel.tx"
+admin, err := gohfc.LoadCertFromFile(pk,sk)
+if err != nil {
+    fmt.Println(err)
+}
+channel := gohfc.Channel{ChannelName: "mychannel", MspId: "Org1MSP"}
+err = client.CreateChannel(admin, channelFile, &channel, "orderer0")
+```
+
+### Join channel
+```
+pk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/admincerts/Admin@org1.example.com-cert.pem"
+sk:="crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/27c48b5b7bc5befba6720f196bc0ad3d0cbdbc51f7555933b124c97d6373fdbc_sk"
+admin, err := gohfc.LoadCertFromFile(pk,sk)
+if err != nil {
+    fmt.Println(err)
+}
+channel := gohfc.Channel{ChannelName: "mychannel", MspId: "Org1MSP"}
+result, err := client.JoinChannel(admin, &channel, []string{"peer0", "peer1"}, "orderer0")
+if err != nil {
+    fmt.Print(err)
+}
+```
+
+### Install chaincode
+
+```
+pk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/admincerts/Admin@org1.example.com-cert.pem"
+sk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/27c48b5b7bc5befba6720f196bc0ad3d0cbdbc51f7555933b124c97d6373fdbc_sk"
+admin, err := gohfc.LoadCertFromFile(pk,sk)
+if err != nil {
+    fmt.Println(err)
+}
+channel := &gohfc.Channel{ChannelName: "mychannel", MspId: "Org1MSP"}
+req := &gohfc.InstallRequest{
+    ChainCodeType:    gohfc.ChaincodeSpec_GOLANG,
+    Channel:          channel,
+    ChainCodeName:    "gatakka",
+    ChainCodeVersion: "1.0",
+    Namespace:        "/the/namespace/for/chaincode/",
+    SrcPath:          "/some/folder/path/chaincode_example02/",
+}
+result, err := client.InstallChainCode(admin, req, []string{"peer0"})
+if err != nil {
+    fmt.Print(err)
+}
+```
+
+### Instantiate
+
+```
+pk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/admincerts/Admin@org1.example.com-cert.pem"
+sk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/27c48b5b7bc5befba6720f196bc0ad3d0cbdbc51f7555933b124c97d6373fdbc_sk"
+admin, err := gohfc.LoadCertFromFile(pk,sk)
+if err != nil {
+    fmt.Println(err)
+}
+
+channel := &gohfc.Channel{ChannelName: "mychannel", MspId: "Org1MSP"}
+req := &gohfc.ChainCode{
+    Type:    gohfc.ChaincodeSpec_GOLANG,
+    Channel: channel,
+    Name:    "gatakka",
+    Version: "1.0",
+    Args:    []string{"init", "a", "100", "b", "200"},
+}
+result, err := client.InstantiateChainCode(admin, req, []string{"peer0"}, "orderer0")
+if err != nil {
+    fmt.Print(err)
+}
+
+```
+
+### Query installed chaincodes
+
+```
+pk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/admincerts/Admin@org1.example.com-cert.pem"
+sk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/27c48b5b7bc5befba6720f196bc0ad3d0cbdbc51f7555933b124c97d6373fdbc_sk"
+admin, err := gohfc.LoadCertFromFile(pk,sk)
+if err != nil {
+    fmt.Println(err)
+}
+
+result, err := client.QueryInstalledChainCodes(admin, "Org1MSP", []string{"peer0"})
+if err != nil {
+    fmt.Print(err)
+}
+```
+
+### Query instantiated chaincodes
+
+```
+pk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/admincerts/Admin@org1.example.com-cert.pem"
+sk:="./crypto-config/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore/27c48b5b7bc5befba6720f196bc0ad3d0cbdbc51f7555933b124c97d6373fdbc_sk"
+admin, err := gohfc.LoadCertFromFile(pk,sk)
+if err != nil {
+    fmt.Println(err)
+}
+
+channel := &gohfc.Channel{
+    MspId:       "Org1MSP",
+    ChannelName: "mychannel",
+}
+
+result, err := client.QueryInstantiatedChainCodes(admin, channel, []string{"peer0"})
+if err != nil {
+    fmt.Print(err)
+}
+```
+
+### Query channels
+
+```
+// identity is identity returned from ca.Enroll or Admin
+result, err := client.QueryChannels(identity, "Org1MSP", []string{"peer0", "peer1"})
+if err != nil {
+    fmt.Print(err)
+}
+```
+
+### Query channel Info
+
+```
+
+channel := &gohfc.Channel{
+    MspId:       "Org1MSP",
+    ChannelName: "mychannel",
+}
+// identity is identity returned from ca.Enroll or Admin
+result, err := client.QueryChannelInfo(identity, channel, []string{"peer0", "peer1"})
+if err != nil {
+    fmt.Print(err)
+}
+
+```
+
+### Query Transaction
+
+```
+channel := &gohfc.Channel{
+    MspId:       "Org1MSP",
+    ChannelName: "mychannel",
+}
+// txid is transaction ID that we are interested in
+txid:="c9b212d3dee1704b16b878f45205bd567a64e085a039f957c133452246717f9f"
+
+// identity is identity returned from ca.Enroll or Admin
+result, err := client.QueryTransaction(identity, channel,txid, []string{"peer0"})
+if err != nil {
+    fmt.Print(err)
+}
+```
+
+### Query
+```
+channel := &gohfc.Channel{
+    MspId:       "Org1MSP",
+    ChannelName: "mychannel",
+}
+
+chaincode := &gohfc.ChainCode{
+    Channel: channel,
+    Type:    gohfc.ChaincodeSpec_GOLANG,
+    Name:    "gatakka",
+    Version: "1.0",
+    Args:    []string{"query", "a"},
+}
+
+// identity is identity returned from ca.Enroll or Admin
+result, err := client.Query(identity, chaincode, []string{"peer0"})
+if err != nil {
+    fmt.Print(err)
+}
+```
+
+### Invoke
+```
+channel := &gohfc.Channel{
+    MspId:       "Org1MSP",
+    ChannelName: "mychannel",
+}
+
+chaincode := &gohfc.ChainCode{
+    Channel: channel,
+    Type:    gohfc.ChaincodeSpec_GOLANG,
+    Name:    "gatakka",
+    Version: "1.0",
+    Args:    []string{"invoke", "c","d","20"},
+}
+
+// identity is identity returned from ca.Enroll or Admin
+result, err := client.Invoke(identity, chaincode, []string{"peer0"}, "orderer0")
+if err != nil {
+    fmt.Print(err)
+}
+```
+
+### Event listening
+
+```
+ch:=make(chan gohfc.EventResponse)
+ctx,cancel:=context.WithCancel(context.Background())
+err:=client.Listen(ctx,identity,"peer0","Org1MSP",ch)
+for d:= range ch{
+    fmt.Println(d)
+}
+```
+Listen starts listening for block events on particular peer and returns all transactions from the committed block.
+The function is nonblocking, and events will be sent using channel. No data is filtered/omitted.
+To stop listen provide context.WithCancel and execute cancel.
+The caller is responsible to read the channel, otherwise, Listen will block, until the channel is read or overflow occurs.
+Every message will represent single transaction in a block including its status if event/s are sent from chaincode
+they will be available in event response `CCEvents`.
+SDK user can call Listen multiple times on different event peers. This is useful in order to have redundancy. If one peer fails,
+events from other peers will be received. All Listen calls can share the same channel.
+In such scenarios, every peer will send its own transactions from blocks. It is SDK user responsibility to
+handle multiple identical events on the same channel.
+

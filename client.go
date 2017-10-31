@@ -1,387 +1,549 @@
 /*
-Copyright Cognition Foundry / Conquex 2017 All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Copyright: Cognition Foundry. All Rights Reserved.
+License: Apache License Version 2.0
 */
-
 package gohfc
 
 import (
 	"github.com/hyperledger/fabric/protos/common"
-	protoPeer "github.com/hyperledger/fabric/protos/peer"
+	"errors"
 	"github.com/golang/protobuf/proto"
-	"encoding/hex"
-	"strconv"
+	"github.com/hyperledger/fabric/protos/peer"
+	"github.com/hyperledger/fabric/protos/orderer"
+	"context"
 )
 
-//TODO create channel
-
-// GohfcClient provides higher level API to execute different transactions and operations to fabric
-type GohfcClient struct {
-	Crypt     CryptSuite
-	KVStore   KeyValueStore
-	CAClient  CAClient
-	Peers     []*Peer
-	EventPeer *Peer
-	Orderers  []*Orderer
+// FabricClient expose API's to work with Hyperledger Fabric
+type FabricClient struct {
+	Crypto     CryptoSuite
+	Peers      map[string]*Peer
+	Orderers   map[string]*Orderer
+	EventPeers map[string]*Peer
 }
 
-// QueryResponse is response from query transaction
-type QueryResponse struct {
-	// TxId is transaction id
-	TxId string
-	// Input is a slice of parameters used for this query
-	Input []string
-	// Response is query response from one or more peer
-	Response []*PeerResponse
+// CreateChannel read channel config generated from configtxgen and send it to orderer
+// This step is needed before any peer is able to join the channel.
+func (c *FabricClient) CreateChannel(identity *Identity, path string, channel *Channel, orderer string) (error) {
+
+	ord, ok := c.Orderers[orderer]
+	if !ok {
+		return ErrInvalidOrdererName
+	}
+
+	envelope, err := decodeChannelFromFs(path)
+	if err != nil {
+		return err
+	}
+	ou, err := buildAndSignChannelConfig(identity, envelope.GetPayload(), c.Crypto, channel)
+	if err != nil {
+		return err
+	}
+	replay, err := ord.Broadcast(ou)
+	if err != nil {
+		return err
+	}
+	if replay.GetStatus() != common.Status_SUCCESS {
+		return errors.New("error creating new channel. See orderer logs for more details")
+	}
+	return nil
 }
 
-// InstallResponse is response from Install request
-type InstallResponse struct {
-	// TxId is transaction id
-	TxId string
-	// Response is response from one or more peers
-	Response []*PeerResponse
-}
+// JoinChannel send transaction to one or many Peers to join particular channel.
+// Channel must be created before this operation using CreateChannel or manually using CLI interface.
+// Orderers must be aware of this channel, otherwise operation will fail.
+func (c *FabricClient) JoinChannel(identity *Identity, channel *Channel, peers []string, orderer string) ([]*PeerResponse, error) {
+	ord, ok := c.Orderers[orderer]
+	if !ok {
+		return nil, ErrInvalidOrdererName
+	}
 
-// Enroll enrolls already registered user and gets ECert. Request is executed over CAClient implementation
-// Note that if enrollmentID is found in key-Value store no request will be executed and data from
-// Key-Value store will be returned. This is true even when ECert is revoked. It is a responsibility of developers
-// to "clean" Key-Value store.
-func (c *GohfcClient) Enroll(enrollmentId, password string) (*Identity, error) {
-	prevCert, ok, err := c.KVStore.Get(enrollmentId)
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+
+	block, err := ord.getGenesisBlock(identity, c.Crypto, channel)
+
 	if err != nil {
 		return nil, err
 	}
-	//return Identity if enrollmentId was found in kv store
-	if len(prevCert) > 1 && ok {
-		identity, err := UnmarshalIdentity(prevCert)
+
+	blockBytes, err := proto.Marshal(block)
+	if err != nil {
+		return nil, err
+	}
+
+	chainCode := ChainCode{Name: CSCC,
+		Type: ChaincodeSpec_GOLANG,
+		Args: []string{"JoinChain"},
+		ArgBytes: blockBytes}
+
+	invocationBytes, err := chainCodeInvocationSpec(&chainCode)
+	if err != nil {
+		return nil, err
+	}
+	creator, err := marshalProtoIdentity(identity, channel)
+	if err != nil {
+		return nil, err
+	}
+	txId, err := newTransactionId(creator)
+	if err != nil {
+		return nil, err
+	}
+	ext := &peer.ChaincodeHeaderExtension{ChaincodeId: &peer.ChaincodeID{Name: CSCC}}
+	channelHeaderBytes, err := channelHeader(common.HeaderType_ENDORSER_TRANSACTION, txId, nil, 0, ext)
+	if err != nil {
+		return nil, err
+	}
+
+	sigHeaderBytes, err := signatureHeader(creator, txId)
+	if err != nil {
+		return nil, err
+	}
+
+	header := header(sigHeaderBytes, channelHeaderBytes)
+	headerBytes, err := proto.Marshal(header)
+	if err != nil {
+		return nil, err
+	}
+	chainCodePropPl := new(peer.ChaincodeProposalPayload)
+	chainCodePropPl.Input = invocationBytes
+
+	chainCodePropPlBytes, err := proto.Marshal(chainCodePropPl)
+	if err != nil {
+		return nil, err
+	}
+
+	proposalBytes, err := proposal(headerBytes, chainCodePropPlBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	proposal, err := signedProposal(proposalBytes, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	return sendToPeers(execPeers, proposal), nil
+}
+
+// InstallChainCode install chainCode to one or many peers. Peer must be join the channel where chaincode will be installed.
+func (c *FabricClient) InstallChainCode(identity *Identity, req *InstallRequest, peers []string) ([]*PeerResponse, error) {
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+	prop, err := createInstallProposal(identity, req)
+	if err != nil {
+		return nil, err
+	}
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	return sendToPeers(execPeers, proposal), nil
+
+}
+
+// InstantiateChainCode run installed chainCode to particular peer in particular channel.
+// Chaincode must be installed using InstallChainCode or CLI interface before this operation.
+func (c *FabricClient) InstantiateChainCode(identity *Identity, req *ChainCode, peers []string, orderer string) (*orderer.BroadcastResponse, error) {
+	ord, ok := c.Orderers[orderer]
+	if !ok {
+		return nil, ErrInvalidOrdererName
+	}
+
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+
+	prop, err := createInstantiateProposal(identity, req)
+	if err != nil {
+		return nil, err
+	}
+
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+
+	transaction, err := createTransaction(prop.proposal, sendToPeers(execPeers, proposal))
+	if err != nil {
+		return nil, err
+	}
+
+	signedTransaction, err := c.Crypto.Sign(transaction, identity.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	reply, err := ord.Broadcast(&common.Envelope{Payload: transaction, Signature: signedTransaction})
+	if err != nil {
+		return nil, err
+	}
+	return reply, nil
+}
+
+// QueryInstalledChainCodes get all chainCodes that are installed but not instantiated in one or many peers
+func (c *FabricClient) QueryInstalledChainCodes(identity *Identity, mspId string, peers []string) ([]*ChainCodesResponse, error) {
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+
+	chainCode := ChainCode{
+		Channel: &Channel{MspId: mspId},
+		Name:    LSCC,
+		Type:    ChaincodeSpec_GOLANG,
+		Args:    []string{"getinstalledchaincodes"},
+	}
+
+	prop, err := createTransactionProposal(identity, &chainCode)
+	if err != nil {
+		return nil, err
+	}
+
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	r := sendToPeers(execPeers, proposal)
+
+	response := make([]*ChainCodesResponse, len(r))
+	for idx, p := range r {
+		ic := ChainCodesResponse{PeerName: p.Name, Error: p.Err}
+		if p.Err != nil {
+			ic.Error = p.Err
+		} else {
+			dec, err := decodeChainCodeQueryResponse(p.Response.Response.GetPayload())
+			if err != nil {
+				ic.Error = err
+			}
+			ic.ChainCodes = dec
+		}
+		response[idx] = &ic
+	}
+	return response, nil
+}
+
+// QueryInstantiatedChainCodes get all chainCodes that are running (instantiated) "inside" particular channel in peer
+func (c *FabricClient) QueryInstantiatedChainCodes(identity *Identity, channel *Channel, peers []string) ([]*ChainCodesResponse, error) {
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+
+	prop, err := createTransactionProposal(identity, &ChainCode{
+		Channel: channel,
+		Name:    LSCC,
+		Type:    ChaincodeSpec_GOLANG,
+		Args:    []string{"getchaincodes"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	r := sendToPeers(execPeers, proposal)
+	response := make([]*ChainCodesResponse, len(r))
+	for idx, p := range r {
+		ic := ChainCodesResponse{PeerName: p.Name, Error: p.Err}
+		if p.Err != nil {
+			ic.Error = p.Err
+		} else {
+			dec, err := decodeChainCodeQueryResponse(p.Response.Response.GetPayload())
+			if err != nil {
+				ic.Error = err
+			}
+			ic.ChainCodes = dec
+		}
+		response[idx] = &ic
+	}
+	return response, nil
+}
+
+// QueryChannels returns a list of channels that peer/s has joined
+func (c *FabricClient) QueryChannels(identity *Identity, mspId string, peers []string) ([]*QueryChannelsResponse, error) {
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+
+	chainCode := ChainCode{
+		Channel: &Channel{MspId: mspId},
+		Name:    CSCC,
+		Type:    ChaincodeSpec_GOLANG,
+		Args:    []string{"GetChannels"},
+	}
+
+	prop, err := createTransactionProposal(identity, &chainCode)
+	if err != nil {
+		return nil, err
+	}
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	r := sendToPeers(execPeers, proposal)
+	response := make([]*QueryChannelsResponse, 0, len(r))
+	for _, pr := range r {
+		peerResponse := QueryChannelsResponse{PeerName: pr.Name}
+		if pr.Err != nil {
+			peerResponse.Error = err
+		} else {
+			channels := new(peer.ChannelQueryResponse)
+			if err := proto.Unmarshal(pr.Response.Response.Payload, channels); err != nil {
+				peerResponse.Error = err
+
+			} else {
+				peerResponse.Channels = make([]string, 0, len(channels.Channels))
+				for _, ci := range channels.Channels {
+					peerResponse.Channels = append(peerResponse.Channels, ci.ChannelId)
+				}
+			}
+		}
+		response = append(response, &peerResponse)
+	}
+	return response, nil
+}
+
+// QueryChannelInfo get current block height, current hash and prev hash about particular channel in peer/s
+func (c *FabricClient) QueryChannelInfo(identity *Identity, channel *Channel, peers []string) ([]*QueryChannelInfoResponse, error) {
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+	chainCode := ChainCode{
+		Channel: channel,
+		Name:    QSCC,
+		Type:    ChaincodeSpec_GOLANG,
+		Args:    []string{"GetChainInfo", channel.ChannelName},
+	}
+
+	prop, err := createTransactionProposal(identity, &chainCode)
+	if err != nil {
+		return nil, err
+	}
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	r := sendToPeers(execPeers, proposal)
+
+	response := make([]*QueryChannelInfoResponse, 0, len(r))
+	for _, pr := range r {
+		peerResponse := QueryChannelInfoResponse{PeerName: pr.Name}
+		if pr.Err != nil {
+			peerResponse.Error = err
+		} else {
+			bci := new(common.BlockchainInfo)
+			if err := proto.Unmarshal(pr.Response.Response.Payload, bci); err != nil {
+				peerResponse.Error = err
+
+			} else {
+				peerResponse.Info = bci
+			}
+		}
+		response = append(response, &peerResponse)
+	}
+	return response, nil
+
+}
+
+// Query execute chainCode to one or many peers and return there responses without sending
+// them to orderer for transaction - ReadOnly operation.
+// Because is expected all peers to be in same state this function allows very easy horizontal scaling by
+// distributing query operations between peers.
+func (c *FabricClient) Query(identity *Identity, chainCode *ChainCode, peers []string) ([]*QueryResponse, error) {
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+	prop, err := createTransactionProposal(identity, chainCode)
+	if err != nil {
+		return nil, err
+	}
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	r := sendToPeers(execPeers, proposal)
+	response := make([]*QueryResponse, len(r))
+	for idx, p := range r {
+		ic := QueryResponse{PeerName: p.Name, Error: p.Err}
+		if p.Err != nil {
+			ic.Error = p.Err
+		} else {
+			ic.Response = p.Response
+		}
+		response[idx] = &ic
+	}
+	return response, nil
+}
+
+// Invoke execute chainCode for ledger update. Peers that simulate the chainCode must be enough to satisfy the policy.
+// When Invoke returns with success this is not granite that ledger was update. Event with `transaction_id`
+// returned from Invoke will be send when actual block is committed.
+// It is responsibility of SDK user to build logic that handle successful and failed commits.
+// If chaincode execute `shim.Error` or simulation fails for other reasons this is considered as simulation failure.
+// In such case Invoke will return the error and transaction will NOT be send to orderer.
+func (c *FabricClient) Invoke(identity *Identity, chainCode *ChainCode, peers []string, orderer string) (*InvokeResponse, error) {
+	ord, ok := c.Orderers[orderer]
+	if !ok {
+		return nil, ErrInvalidOrdererName
+	}
+
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+	prop, err := createTransactionProposal(identity, chainCode)
+	if err != nil {
+		return nil, err
+	}
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	transaction, err := createTransaction(prop.proposal, sendToPeers(execPeers, proposal))
+	if err != nil {
+		return nil, err
+	}
+	signedTransaction, err := c.Crypto.Sign(transaction, identity.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	reply, err := ord.Broadcast(&common.Envelope{Payload: transaction, Signature: signedTransaction})
+	if err != nil {
+		return nil, err
+	}
+	return &InvokeResponse{Status: reply.Status, TxID: prop.transactionId}, nil
+}
+
+// QueryTransaction get data for particular transaction.
+// TODO for now it only returns status of the transaction, and not the whole data (payload, endorsement etc)
+func (c *FabricClient) QueryTransaction(identity *Identity, channel *Channel, txId string, peers []string) ([]*QueryTransactionResponse, error) {
+	execPeers := c.getPeers(peers)
+	if len(peers) != len(execPeers) {
+		return nil, ErrPeerNameNotFound
+	}
+	chainCode := ChainCode{Channel: channel, Name: QSCC, Type: ChaincodeSpec_GOLANG,
+		Args: []string{"GetTransactionByID", channel.ChannelName, txId}}
+
+	prop, err := createTransactionProposal(identity, &chainCode)
+	if err != nil {
+		return nil, err
+	}
+	proposal, err := signedProposal(prop.proposal, identity, c.Crypto)
+	if err != nil {
+		return nil, err
+	}
+	r := sendToPeers(execPeers, proposal)
+	response := make([]*QueryTransactionResponse, len(r))
+	for idx, p := range r {
+		qtr := QueryTransactionResponse{PeerName: p.Name, Error: p.Err}
+		if p.Err != nil {
+			qtr.Error = p.Err
+		} else {
+			dec, err := decodeTransaction(p.Response.Response.GetPayload())
+			if err != nil {
+				qtr.Error = err
+			}
+			qtr.StatusCode = dec
+		}
+		response[idx] = &qtr
+	}
+	return response, nil
+}
+
+// Listen start listening for block events on particular peer and return all transactions from committed block.
+// Function is non blocking and events will be send using channel. No data is filtered/omitted.
+// To stop listen provide context.WithCancel and execute cancel.
+// The caller is responsible to read the channel, otherwise Listen will block until channel is read or overflow occurs.
+// Every message will represent single transaction in a block including its status, if event/s are sent from chaincode
+// they will be available in event response `CCEvents`.
+// SDK user can call Listen multiple times on different event peers. This is useful to have redundancy. If one peer fails,
+// events from other peers will be received. All Listen calls can share same channel.
+// In such scenarios every peer will send its own transactions from blocks. It is SDK user responsibility to
+// handle multiple identical events in same channel.
+func (c *FabricClient) Listen(ctx context.Context, identity *Identity, eventPeer, mspId string, response chan<- BlockEventResponse) (error) {
+	ep, ok := c.EventPeers[eventPeer]
+	if !ok {
+		return ErrPeerNameNotFound
+	}
+	return newEventListener(ctx, response, c.Crypto, identity, mspId, ep)
+}
+
+// NewFabricClient creates new client from provided config file.
+func NewFabricClient(path string) (*FabricClient, error) {
+	config, err := NewClientConfig(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var crypto CryptoSuite
+	switch config.CryptoConfig.Family {
+	case "ecdsa":
+		crypto, err = NewECCryptSuiteFromConfig(config.CryptoConfig)
 		if err != nil {
 			return nil, err
 		}
-		return identity, nil
+	default:
+		return nil, ErrInvalidAlgorithmFamily
 	}
 
-	identity, err := c.CAClient.Enroll(enrollmentId, password)
-	if err != nil {
-		return nil, err
-	}
-	marsh, err := MarshalIdentity(identity)
+	peers := make(map[string]*Peer)
+	for name, p := range config.Peers {
+		newPeer, err := NewPeerFromConfig(p)
+		newPeer.Name = name
+		if err != nil {
+			return nil, err
+		}
+		peers[name] = newPeer
 
-	if err != nil {
-		return identity, err
 	}
 
-	if err := c.KVStore.Set(enrollmentId, marsh); err != nil {
-		return identity, err
+	eventPeers := make(map[string]*Peer)
+	for name, p := range config.EventPeers {
+		newEventPeer, err := NewPeerFromConfig(p)
+		newEventPeer.Name = name
+		if err != nil {
+			return nil, err
+		}
+		eventPeers[name] = newEventPeer
 	}
-	return identity, nil
+
+	orderers := make(map[string]*Orderer)
+	for name, o := range config.Orderers {
+		newOrderer, err := NewOrdererFromConfig(o)
+		newOrderer.Name = name
+		if err != nil {
+			return nil, err
+		}
+		orderers[name] = newOrderer
+	}
+	client := FabricClient{Peers: peers, EventPeers: eventPeers, Orderers: orderers, Crypto: crypto}
+	return &client, nil
 }
 
-// Register registers new user using CAClient implementation.
-func (c *GohfcClient) Register(certificate *Certificate, req *RegistrationRequest) (*CAResponse, error) {
-	return c.CAClient.Register(certificate, req)
+func (c FabricClient) getPeers(names []string) []*Peer {
+	res := make([]*Peer, 0, len(names))
+	for _, p := range names {
+		if fp, ok := c.Peers[p]; ok {
+			res = append(res, fp)
+		}
+	}
+	return res
 }
 
-// Query executes query operation over one or many peers.
-// Note that this invocation will NOT execute chaincode on ledger and will NOT change height of block-chain.
-// Result will be from peers local block-chain data copy. It is very fast and scalable approach but in some rare cases
-// peers can be out of sync and return different result from data in actual ledger.
-func (c *GohfcClient) Query(certificate *Certificate, chain *Chain, peers []*Peer, args []string) (*QueryResponse, error) {
-	prop, err := chain.CreateTransactionProposal(certificate, args)
-	if err != nil {
-		return nil, err
+func (c FabricClient) getEventPeers(names []string) []*Peer {
+	res := make([]*Peer, 0, len(names))
+	for _, p := range names {
+		if fp, ok := c.EventPeers[p]; ok {
+			res = append(res, fp)
+		}
 	}
-	r := chain.SendTransactionProposal(prop, peers)
-	return &QueryResponse{Input: r.Input, Response: r.EndorsersResponse, TxId: r.TxId}, nil
-}
-
-// Invoke prepares transaction proposal, sends this transaction proposal to peers for endorsement and sends endorsed
-// transaction to orderer for execution. This operation will change block-chain and ledger states.
-// Note that this operation is asynchronous. Even if this method returns successful execution this does not guaranty
-// that actual ledger and block-chain operations are finished and/or are successful.
-// Events must be used to listen for block events and compare transaction id (TxId) from this method
-// to transaction ids  from events.
-func (c *GohfcClient) Invoke(certificate *Certificate, chain *Chain, peers []*Peer, orderers []*Orderer, args []string) (*InvokeResponse, error) {
-	prop, err := chain.CreateTransactionProposal(certificate, args)
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(prop, peers)
-	result, err := chain.SendTransaction(certificate, r, orderers)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// Install will install chaincode to provided peers.
-// Note that in this version only Go chaincode is supported for installation.
-func (c *GohfcClient) Install(certificate *Certificate, chain *Chain, peers []*Peer, req *InstallRequest) (*InstallResponse, error) {
-	prop, err := chain.CreateInstallProposal(certificate, req)
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(prop, peers)
-	return &InstallResponse{TxId: r.TxId, Response: r.EndorsersResponse}, nil
-}
-
-// GetChannels returns a list of channels that peer has joined.
-func (c *GohfcClient) GetChannels(certificate *Certificate, qPeer *Peer, mspId string) (*protoPeer.ChannelQueryResponse, error) {
-	chain, err := NewChain("", "cscc", mspId, ChaincodeSpec_GOLANG, c.Crypt)
-	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetChannels"})
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(prop, []*Peer{qPeer})
-	if r.EndorsersResponse[0].Err != nil {
-		return nil, r.EndorsersResponse[0].Err
-	}
-	if r.EndorsersResponse[0].Response.Response.Status != 200 {
-		return nil, ErrBadTransactionStatus
-	}
-	ch := new(protoPeer.ChannelQueryResponse)
-	if err := proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, ch); err != nil {
-		return nil, err
-	}
-	return ch, nil
-}
-
-// GetInstalledChainCodes returns list of chaincodes that are installed on peer.
-// Note that this list contains only chaincodes that are installed but not instantiated.
-func (c *GohfcClient) GetInstalledChainCodes(certificate *Certificate, qPeer *Peer, mspId string) (*protoPeer.ChaincodeQueryResponse, error) {
-	chain, err := NewChain("", "lccc", mspId, ChaincodeSpec_GOLANG, c.Crypt)
-	prop, err := chain.CreateTransactionProposal(certificate, []string{"getinstalledchaincodes"})
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(prop, []*Peer{qPeer})
-	if r.EndorsersResponse[0].Err != nil {
-		return nil, r.EndorsersResponse[0].Err
-	}
-	if r.EndorsersResponse[0].Response.Response.Status != 200 {
-		return nil, ErrBadTransactionStatus
-	}
-	ch := new(protoPeer.ChaincodeQueryResponse)
-	if err := proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, ch); err != nil {
-		return nil, err
-	}
-	return ch, nil
-}
-
-// GetChannelChainCodes returns list of chaincodes that are instantiated on peer.
-// Note that this list contains only chaincodes that are instantiated.
-func (c *GohfcClient) GetChannelChainCodes(certificate *Certificate, qPeer *Peer, channelName string, mspId string) (*protoPeer.ChaincodeQueryResponse, error) {
-	chain, err := NewChain(channelName, "lccc", mspId, ChaincodeSpec_GOLANG, c.Crypt)
-	prop, err := chain.CreateTransactionProposal(certificate, []string{"getchaincodes"})
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(prop, []*Peer{qPeer})
-	if r.EndorsersResponse[0].Err != nil {
-		return nil, r.EndorsersResponse[0].Err
-	}
-	if r.EndorsersResponse[0].Response.Response.Status != 200 {
-		return nil, ErrBadTransactionStatus
-	}
-	ch := new(protoPeer.ChaincodeQueryResponse)
-	if err := proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, ch); err != nil {
-		return nil, err
-	}
-	return ch, nil
-}
-
-// QueryTransaction will execute query over transaction id. If transaction is not found error is returned.
-// Note that this operation is executed on peer not on orderer.
-func (c *GohfcClient) QueryTransaction(certificate *Certificate, qPeer *Peer, channelName, txid string, mspId string) (*protoPeer.ProcessedTransaction, *common.Payload, error) {
-	chain, err := NewChain("", "qscc", mspId, ChaincodeSpec_GOLANG, c.Crypt)
-	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetTransactionByID", channelName, txid})
-	if err != nil {
-		return nil, nil, err
-	}
-	r := chain.SendTransactionProposal(prop, []*Peer{qPeer})
-	if r.EndorsersResponse[0].Err != nil {
-		return nil, nil, r.EndorsersResponse[0].Err
-	}
-	if r.EndorsersResponse[0].Response.Response.Status != 200 {
-		return nil, nil, ErrBadTransactionStatus
-	}
-	transaction := new(protoPeer.ProcessedTransaction)
-	payload := new(common.Payload)
-	if err := proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, transaction); err != nil {
-		return nil, nil, err
-	}
-	if err := proto.Unmarshal(transaction.TransactionEnvelope.Payload, payload); err != nil {
-		return nil, nil, err
-	}
-	return transaction, payload, nil
-}
-
-// Instantiate instantiates already installed chaincode.
-func (c *GohfcClient) Instantiate(certificate *Certificate, chain *Chain, peer *Peer, orderer *Orderer, req *InstallRequest, policy *common.SignaturePolicyEnvelope) (*InvokeResponse, error) {
-
-	prop, err := chain.CreateInstantiateProposal(certificate, req, policy)
-	if err != nil {
-		return nil, err
-	}
-	rbb := chain.SendTransactionProposal(prop, []*Peer{peer})
-
-	result, err := chain.SendTransaction(certificate, rbb, []*Orderer{orderer})
-	if result != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-// RevokeCert revokes ECert on CA
-func (c *GohfcClient) RevokeCert(identity *Identity, reason int) (*CAResponse, error) {
-	aki := string(hex.EncodeToString(identity.Cert.AuthorityKeyId))
-	serial := identity.Cert.SerialNumber.String()
-	return c.CAClient.Revoke(identity.Certificate, &(RevocationRequest{AKI: aki, EnrollmentId: identity.EnrollmentId, Serial: serial, Reason: reason}))
-}
-
-// JoinChannel will join peers from peers slice to channel. If peer is already in channel error will be returned for
-// this particular peer, others will join channel.
-func (c *GohfcClient) JoinChannel(certificate *Certificate, channelName string, mspId string, peers []*Peer, pOrderer *Orderer) (*ProposalTransactionResponse, error) {
-	chain, err := NewChain("", "cscc", mspId, ChaincodeSpec_GOLANG, c.Crypt)
-	if err != nil {
-		Logger.Errorf("Error creating new chain: %s", err)
-		return nil, err
-	}
-	prop, err := chain.CreateSeekProposal(certificate, peers, pOrderer, channelName, 0)
-	if err != nil {
-		return nil, err
-	}
-	block, err := pOrderer.GetBlock(&common.Envelope{Payload: prop.Payload, Signature: prop.Proposal.Signature})
-	if err != nil {
-		return nil, err
-	}
-	//send proposal with block to peers
-	blockData, err := proto.Marshal(block.Block)
-	if err != nil {
-		Logger.Errorf("Error marshal orderer.DeliverResponse_Block: %s", err)
-		return nil, err
-	}
-
-	proposal, err := chain.CreateTransactionProposal(certificate, []string{"JoinChain", string(blockData)})
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(proposal, peers)
-	return r, nil
-}
-
-//QueryInfo gets blockchain data as current height, current hash and previous hash.
-func (c *GohfcClient) QueryInfo(certificate *Certificate, channelName string, mspId string, peer *Peer) (*common.BlockchainInfo, error) {
-	chain, err := NewChain(channelName, "qscc", mspId, ChaincodeSpec_GOLANG, c.Crypt)
-	if err != nil {
-		Logger.Errorf("Error creating new chain: %s", err)
-		return nil, err
-	}
-	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetChainInfo", channelName})
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(prop, []*Peer{peer})
-	if r.EndorsersResponse[0].Err != nil || r.EndorsersResponse[0].Response.Response.Status != 200 {
-		return nil, ErrBadTransactionStatus
-	}
-	var info = new(common.BlockchainInfo)
-	err = proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, info)
-	if err != nil {
-		Logger.Errorf("Error unmarshal common.BlockchainInfo: %s", err)
-		return nil, ErrBadTransactionStatus
-	}
-	return info, nil
-}
-
-//QueryBlockByHash returns data stored in block that is identified with provided hash.
-func (c *GohfcClient) QueryBlockByHash(certificate *Certificate, channelName, mspId, blockHash string, peer *Peer) (*common.Block, error) {
-	chain, err := NewChain(channelName, "qscc", mspId, ChaincodeSpec_GOLANG, c.Crypt)
-	if err != nil {
-		Logger.Errorf("Error creating new chain: %s", err)
-		return nil, err
-	}
-
-	decHash, err := hex.DecodeString(blockHash)
-	if err != nil {
-		Logger.Errorf("Error decode hex string: %s", err)
-		return nil, err
-	}
-	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetBlockByHash", channelName, string(decHash)})
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(prop, []*Peer{peer})
-	if r.EndorsersResponse[0].Err != nil || r.EndorsersResponse[0].Response.Response.Status != 200 {
-		return nil, ErrBadTransactionStatus
-	}
-	var block = new(common.Block)
-	err = proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, block)
-	if err != nil {
-		Logger.Errorf("Error unmarshal common.BlockchainInfo: %s", err)
-		return nil, ErrBadTransactionStatus
-	}
-	return block, nil
-}
-
-//QueryBlock returns data stored in block that is identified with provided number.
-func (c *GohfcClient) QueryBlock(certificate *Certificate, channelName, mspId string, blockNumber uint64, peer *Peer) (*common.Block, error) {
-	chain, err := NewChain(channelName, "qscc", mspId, ChaincodeSpec_GOLANG, c.Crypt)
-	if err != nil {
-		Logger.Errorf("Error creating new chain: %s", err)
-		return nil, err
-	}
-	prop, err := chain.CreateTransactionProposal(certificate, []string{"GetBlockByNumber", channelName, strconv.FormatUint(blockNumber, 10)})
-	if err != nil {
-		return nil, err
-	}
-	r := chain.SendTransactionProposal(prop, []*Peer{peer})
-	if r.EndorsersResponse[0].Err != nil || r.EndorsersResponse[0].Response.Response.Status != 200 {
-		return nil, ErrBadTransactionStatus
-	}
-	var block = new(common.Block)
-	err = proto.Unmarshal(r.EndorsersResponse[0].Response.Response.Payload, block)
-	if err != nil {
-		Logger.Errorf("Error unmarshal common.BlockchainInfo: %s", err)
-		return nil, ErrBadTransactionStatus
-	}
-	return block, nil
-}
-
-// NewClientFromJSONConfig creates new GohfcClient from json config
-func NewClientFromJSONConfig(path string, kvStore KeyValueStore) (*GohfcClient, error) {
-	config, err := NewConfigFromJSON(path)
-	if err != nil {
-		return nil, err
-	}
-	crypto, err := NewECCryptSuite(&config.Crypt)
-	if err != nil {
-		return nil, err
-	}
-	caClient, err := NewFabricCAClientFromConfig(&config.CAServer, crypto, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	peers := make([]*Peer, 0, len(config.Peers))
-	for _, peer := range config.Peers {
-		peers = append(peers, NewPeerFromConfig(&peer))
-	}
-	eventPeer := NewPeerFromConfig(&config.EventPeer)
-	orderers := make([]*Orderer, 0, len(config.Orderers))
-	for _, orderer := range config.Orderers {
-		orderers = append(orderers, NewOrdererFromConfig(&orderer))
-	}
-	return &GohfcClient{Crypt: crypto, KVStore: kvStore, CAClient: caClient, Peers: peers, EventPeer: eventPeer, Orderers: orderers}, nil
+	return res
 }

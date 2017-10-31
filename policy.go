@@ -1,44 +1,37 @@
 /*
-Copyright Cognition Foundry / Conquex 2017 All Rights Reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Copyright: Cognition Foundry. All Rights Reserved.
+License: Apache License Version 2.0
 */
-
 package gohfc
 
 import (
+	"fmt"
 	"github.com/hyperledger/fabric/protos/common"
+	"github.com/hyperledger/fabric/protos/msp"
 	"github.com/golang/protobuf/proto"
 )
 
-// DefaultPolicy generates simple non restrictive policy.
-func DefaultPolicy() (*common.SignaturePolicyEnvelope, error) {
-	mpr, err := proto.Marshal(&common.MSPRole{Role: common.MSPRole_ADMIN, MspIdentifier: "DEFAULT"})
+func defaultPolicy(mspid string) (*common.SignaturePolicyEnvelope, error) {
+	memberRole, err := proto.Marshal(&msp.MSPRole{Role: msp.MSPRole_MEMBER, MspIdentifier: mspid})
 	if err != nil {
-		Logger.Errorf("Error marshal common.MSPRole: %s", err)
-		return nil, err
+		return nil, fmt.Errorf("Error marshal MSPRole: %s", err)
 	}
-	principal := &common.MSPPrincipal{
-		PrincipalClassification: common.MSPPrincipal_ROLE,
-		Principal:               mpr}
-	sb := &common.SignaturePolicy{Type: &common.SignaturePolicy_SignedBy{SignedBy: 0}}
-	nof := &common.SignaturePolicy{Type: &common.SignaturePolicy_NOutOf_{NOutOf: &common.SignaturePolicy_NOutOf{
-		N: 1, Policies: []*common.SignaturePolicy{sb}}}}
-
+	onePrn := &msp.MSPPrincipal{
+		PrincipalClassification: msp.MSPPrincipal_ROLE,
+		Principal:               memberRole,
+	}
+	signedBy := &common.SignaturePolicy{Type: &common.SignaturePolicy_SignedBy{SignedBy: 0}}
+	oneOfone := &common.SignaturePolicy{
+		Type: &common.SignaturePolicy_NOutOf_{
+			NOutOf: &common.SignaturePolicy_NOutOf{
+				N: 1, Rules: []*common.SignaturePolicy{signedBy},
+			},
+		},
+	}
 	p := &common.SignaturePolicyEnvelope{
 		Version:    0,
-		Policy:     nof,
-		Identities: []*common.MSPPrincipal{principal},
+		Rule:       oneOfone,
+		Identities: []*msp.MSPPrincipal{onePrn},
 	}
 	return p, nil
 }

@@ -14,12 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package common
+package msp
 
-func NewConfigGroup() *ConfigGroup {
-	return &ConfigGroup{
-		Groups:   make(map[string]*ConfigGroup),
-		Values:   make(map[string]*ConfigValue),
-		Policies: make(map[string]*ConfigPolicy),
+import (
+	"fmt"
+
+	"github.com/golang/protobuf/proto"
+)
+
+func (mc *MSPConfig) VariablyOpaqueFields() []string {
+	return []string{"config"}
+}
+
+func (mc *MSPConfig) VariablyOpaqueFieldProto(name string) (proto.Message, error) {
+	if name != mc.VariablyOpaqueFields()[0] {
+		return nil, fmt.Errorf("not a marshaled field: %s", name)
+	}
+	switch mc.Type {
+	case 0:
+		return &FabricMSPConfig{}, nil
+	default:
+		return nil, fmt.Errorf("unable to decode MSP type: %v", mc.Type)
 	}
 }
