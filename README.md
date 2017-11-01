@@ -370,7 +370,7 @@ events from other peers will be received. All Listen calls can share the same ch
 In such scenarios, every peer will send its own transactions from blocks. It is SDK user responsibility to
 handle multiple identical events on the same channel.
 
-##Benchmark
+## Benchmark
 CPU: AMD Raisen 7 1700 8 cores, 16 threats
 RAM: 16GB DDR4
 Hyperledger version 1.0.3 - official images
@@ -400,3 +400,8 @@ Here are the results in TPM (transactions per minute)
 | 100                      | 1000                   | 10000                           | 8.8      | 68182 |
 | 200                      | 1000                   | 20000                           | 14.5     | 82759 |
 | 300                      | 1000                   | 30000                           | 21       | 85714 |
+
+As expected block size is really important.
+
+Also GOHFC has potential for better optimizations that can increase the throughput even more. Probably we will add them 
+with changes for HL v1.1  
