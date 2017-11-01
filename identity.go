@@ -6,7 +6,6 @@ package gohfc
 
 import (
 	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
