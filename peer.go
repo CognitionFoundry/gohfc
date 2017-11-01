@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"google.golang.org/grpc/credentials"
+	"time"
 )
 
 // Peer expose API's to communicate with peer
@@ -59,5 +60,7 @@ func NewPeerFromConfig(conf PeerConfig) (*Peer,error) {
 		}
 		p.Opts = append(p.Opts, grpc.WithTransportCredentials(creds))
 	}
+	p.Opts = append(p.Opts, grpc.WithBlock())
+	p.Opts = append(p.Opts, grpc.WithTimeout(3*time.Second))
 	return &p,nil
 }

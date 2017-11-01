@@ -21,33 +21,34 @@ type Orderer struct {
 	Uri             string
 	Opts            []grpc.DialOption
 	caPath          string
-	broadcastClient orderer.AtomicBroadcast_BroadcastClient
+	con *grpc.ClientConn
 }
 
 const timeout = 5
 
 // Broadcast Broadcast envelope to orderer for execution.
 func (o *Orderer) Broadcast(envelope *common.Envelope) (*orderer.BroadcastResponse, error) {
-	if o.broadcastClient ==nil{
-		connection, err := grpc.Dial(o.Uri, o.Opts...)
+	if o.con ==nil{
+		c, err := grpc.Dial(o.Uri, o.Opts...)
 		if err != nil {
 			return nil, fmt.Errorf("cannot connect to orderer: %s err is: %v", o.Name, err)
 		}
-		bcc, err := orderer.NewAtomicBroadcastClient(connection).Broadcast(context.Background())
-		if err != nil {
-			return nil, err
-		}
-		o.broadcastClient =bcc
+		o.con=c
 	}
-
-	o.broadcastClient.Send(envelope)
-	response, err:= o.broadcastClient.Recv()
+	bcc, err := orderer.NewAtomicBroadcastClient(o.con).Broadcast(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer bcc.CloseSend()
+	bcc.Send(envelope)
+	response, err:= bcc.Recv()
 	if err != nil {
 		return nil, err
 	}
 	if response.Status != common.Status_SUCCESS {
 		return nil,fmt.Errorf("unexpected status: %v", response.Status)
 	}
+
 	return response,err
 }
 // Deliver delivers envelope to orderer. Please note that new connection will be created on every call of Deliver.
@@ -146,6 +147,9 @@ func NewOrdererFromConfig(conf OrdererConfig) (*Orderer, error) {
 			return nil, fmt.Errorf("cannot read orderer %s credentials err is: %v", o.Name, err)
 		}
 		o.Opts = append(o.Opts, grpc.WithTransportCredentials(creds))
+
 	}
+	o.Opts = append(o.Opts, grpc.WithBlock())
+	o.Opts = append(o.Opts, grpc.WithTimeout(3*time.Second))
 	return &o, nil
 }

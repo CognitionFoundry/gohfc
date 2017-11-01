@@ -370,3 +370,33 @@ events from other peers will be received. All Listen calls can share the same ch
 In such scenarios, every peer will send its own transactions from blocks. It is SDK user responsibility to
 handle multiple identical events on the same channel.
 
+##Benchmark
+CPU: AMD Raisen 7 1700 8 cores, 16 threats
+RAM: 16GB DDR4
+Hyperledger version 1.0.3 - official images
+
+Benchamark results are based on invocation transactions. Request is send to 2 peers for endorsement and
+response from simulation and endorsement is broadcasted to a single order. Orderer is always the same.
+Transaction is counted as completed after broadcast.recv method returns.
+
+Hyperledger network is identical to Kafka examples in bddtests.
+
+Here are the results in TPM (transactions per minute)
+
+| Workers count in parallel | Orderer max block size | Number of executed transactions | Time (s) | TPM   |
+|--------------------------|------------------------|---------------------------------|----------|-------|
+| 1                        | 10                     | 100                             | 1.3      | 4615  |
+| 10                       | 10                     | 1000                            | 2.5      | 24000 |
+| 100                      | 10                     | 10000                           | 9.7      | 61856 |
+| 200                      | 10                     | 20000                           | 16.5     | 72727 |
+| 300                      | 10                     | 30000                           | 23.7     | 75949 |
+| 1                        | 100                    | 100                             | 0.9      | 6667  |
+| 10                       | 100                    | 1000                            | 1.664    | 36058 |
+| 100                      | 100                    | 10000                           | 8.3      | 72289 |
+| 200                      | 100                    | 20000                           | 15.2     | 78947 |
+| 300                      | 100                    | 30000                           | 21.7     | 82949 |
+| 1                        | 1000                   | 100                             | 1.27     | 4724  |
+| 10                       | 1000                   | 1000                            | 2.1      | 28571 |
+| 100                      | 1000                   | 10000                           | 8.8      | 68182 |
+| 200                      | 1000                   | 20000                           | 14.5     | 82759 |
+| 300                      | 1000                   | 30000                           | 21       | 85714 |
