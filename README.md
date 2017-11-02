@@ -373,10 +373,13 @@ handle multiple identical events on the same channel.
 ## Benchmark
 CPU: AMD Raisen 7 1700 8 cores, 16 threats
 RAM: 16GB DDR4
+OS: Linux 4.10.10-041010-generic
 Hyperledger version 1.0.3 - official images
+Docker version:17.09.0-ce
+Go: 1.9.1 linux/amd64
 
-Benchamark results are based on invocation transactions. Request is send to 2 peers for endorsement and
-response from simulation and endorsement is broadcasted to a single order. Orderer is always the same.
+Benchmark results are based on invocation transactions. Request is send to 2 peers for endorsement and
+response from the endorsement is broadcasted to a single order. Orderer is always the same.
 Transaction is counted as completed after broadcast.recv method returns.
 
 Hyperledger network is identical to Kafka examples in bddtests.
@@ -400,6 +403,28 @@ Here are the results in TPM (transactions per minute)
 | 100                      | 1000                   | 10000                           | 8.8      | 68182 |
 | 200                      | 1000                   | 20000                           | 14.5     | 82759 |
 | 300                      | 1000                   | 30000                           | 21       | 85714 |
+
+
+This table execute same benchmark in same environment with the difference that broadcast is send to one of the three
+orderers using round-robin scheduling
+
+| Workers count in parallel  | Orderer max block size  | Number of executed transactions  | Time (s)  | TPM   |
+|----------------------------|-------------------------|----------------------------------|-----------|-------|
+| 1                          | 10                      | 100                              | 1.1       | 5455  |
+| 10                         | 10                      | 1000                             | 2         | 30000 |
+| 100                        | 10                      | 10000                            | 7.6       | 78947 |
+| 200                        | 10                      | 20000                            | 12.9      | 93023 |
+| 300                        | 10                      | 30000                            | 18.2      | 98901 |
+| 1                          | 100                     | 100                              | 1.1       | 5455  |
+| 10                         | 100                     | 1000                             | 1.9       | 31579 |
+| 100                        | 100                     | 10000                            | 8         | 75000 |
+| 200                        | 100                     | 20000                            | 13.5      | 88889 |
+| 300                        | 100                     | 30000                            | 18.1      | 99448 |
+| 1                          | 1000                    | 100                              | 1.3       | 4615  |
+| 10                         | 1000                    | 1000                             | 2.3       | 26087 |
+| 100                        | 1000                    | 10000                            | 9.2       | 65217 |
+| 200                        | 1000                    | 20000                            | 15.4      | 77922 |
+| 300                        | 1000                    | 30000                            | 21.2      | 84906 |
 
 As expected block size is really important.
 
