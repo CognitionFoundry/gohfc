@@ -146,7 +146,8 @@ func (c *FabricClient) InstallChainCode(identity *Identity, req *InstallRequest,
 
 // InstantiateChainCode run installed chainCode to particular peer in particular channel.
 // Chaincode must be installed using InstallChainCode or CLI interface before this operation.
-func (c *FabricClient) InstantiateChainCode(identity *Identity, req *ChainCode, peers []string, orderer string) (*orderer.BroadcastResponse, error) {
+// operation parameter can be `deploy` or `upgrade`.
+func (c *FabricClient) InstantiateChainCode(identity *Identity, req *ChainCode, peers []string, orderer string,operation string) (*orderer.BroadcastResponse, error) {
 	ord, ok := c.Orderers[orderer]
 	if !ok {
 		return nil, ErrInvalidOrdererName
@@ -157,7 +158,7 @@ func (c *FabricClient) InstantiateChainCode(identity *Identity, req *ChainCode, 
 		return nil, ErrPeerNameNotFound
 	}
 
-	prop, err := createInstantiateProposal(identity, req)
+	prop, err := createInstantiateProposal(identity, req,operation)
 	if err != nil {
 		return nil, err
 	}

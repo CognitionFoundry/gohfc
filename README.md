@@ -218,7 +218,7 @@ req := &gohfc.ChainCode{
     Version: "1.0",
     Args:    []string{"init", "a", "100", "b", "200"},
 }
-result, err := client.InstantiateChainCode(admin, req, []string{"peer0"}, "orderer0")
+result, err := client.InstantiateChainCode(admin, req, []string{"peer0"}, "orderer0","deploy")
 if err != nil {
     fmt.Print(err)
 }
@@ -371,7 +371,7 @@ In such scenarios, every peer will send its own transactions from blocks. It is 
 handle multiple identical events on the same channel.
 
 ## Benchmark
-CPU: AMD Raisen 7 1700 8 cores, 16 threats
+CPU: AMD Ryzen 7 1700 8 cores, 16 threats
 RAM: 16GB DDR4
 OS: Linux 4.10.10-041010-generic
 Hyperledger version 1.0.3 - official images

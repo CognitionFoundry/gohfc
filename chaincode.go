@@ -18,6 +18,7 @@ import (
 	"path"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"time"
+	"fmt"
 )
 
 type ChainCodeType int32
@@ -150,7 +151,11 @@ func createInstallProposal(identity *Identity, req *InstallRequest) (*transactio
 
 // createInstantiateProposal creates instantiate proposal transaction for already installed chaincode.
 // transaction is not send from this func
-func createInstantiateProposal(identity *Identity, req *ChainCode) (*transactionProposal, error) {
+func createInstantiateProposal(identity *Identity, req *ChainCode,operation string) (*transactionProposal, error) {
+	if operation!="deploy" && operation!="upgrade"{
+		return nil,fmt.Errorf("install proposall accept only 'deploy' and 'upgrade' operations")
+	}
+
 	depSpec, err := proto.Marshal(&peer.ChaincodeDeploymentSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
 			ChaincodeId: &peer.ChaincodeID{Name: req.Name, Version: req.Version},
@@ -175,7 +180,7 @@ func createInstantiateProposal(identity *Identity, req *ChainCode) (*transaction
 		Type: req.Type,
 		Name: LSCC,
 		rawArgs: [][]byte{
-			[]byte("deploy"),
+			[]byte(operation),
 			[]byte(req.Channel.ChannelName),
 			depSpec, marshPolicy,
 			[]byte("escc"), []byte("vscc"),
