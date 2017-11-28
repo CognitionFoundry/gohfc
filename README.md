@@ -193,12 +193,21 @@ req := &gohfc.InstallRequest{
     ChainCodeVersion: "1.0",
     Namespace:        "/the/namespace/for/chaincode/",
     SrcPath:          "/some/folder/path/chaincode_example02/",
+    Libraries: []gohfc.ChaincodeLibrary{
+    			{
+    				Namespace: "/the/namespace/for/chaincode/library",
+    				SrcPath:   "/some/folder/path/for/library",
+    			}},
 }
 result, err := client.InstallChainCode(admin, req, []string{"peer0"})
 if err != nil {
     fmt.Print(err)
 }
 ```
+
+If chaincode depends on external libraries user can vendor this libraries.
+
+If vendoring is not practical, user can add list of `Libraries` in `gohfc.InstallRequest`. Source code of this libraries will be included in the install package with provided namespace. It is responsibility of the user to prevent name collisions, cycle imports and other conflicts.   
 
 ### Instantiate
 

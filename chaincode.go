@@ -33,14 +33,14 @@ const (
 
 // ChainCode the fields necessary to execute operation over chaincode.
 type ChainCode struct {
-	Channel  *Channel
-	Name     string
-	Version  string
-	Type     ChainCodeType
-	Args     []string
-	ArgBytes []byte
+	Channel      *Channel
+	Name         string
+	Version      string
+	Type         ChainCodeType
+	Args         []string
+	ArgBytes     []byte
 	TransientMap map[string][]byte
-	rawArgs  [][]byte
+	rawArgs      [][]byte
 }
 
 func (c *ChainCode) toChainCodeArgs() ([][]byte) {
@@ -65,6 +65,12 @@ type InstallRequest struct {
 	ChainCodeType    ChainCodeType
 	Namespace        string
 	SrcPath          string
+	Libraries        []ChaincodeLibrary
+}
+
+type ChaincodeLibrary struct {
+	Namespace string
+	SrcPath   string
 }
 
 // ChainCodesResponse is the result of queering installed and instantiated chaincodes
@@ -73,6 +79,7 @@ type ChainCodesResponse struct {
 	Error      error
 	ChainCodes []*peer.ChaincodeInfo
 }
+
 // createInstallProposal read chaincode from provided source and namespace, pack it and generate install proposal
 // transaction. Transaction is not send from this func
 func createInstallProposal(identity *Identity, req *InstallRequest) (*transactionProposal, error) {
@@ -82,21 +89,21 @@ func createInstallProposal(identity *Identity, req *InstallRequest) (*transactio
 
 	switch req.ChainCodeType {
 	case ChaincodeSpec_GOLANG:
-		packageBytes, err = packGolangCC(req.Namespace, req.SrcPath)
+		packageBytes, err = packGolangCC(req.Namespace, req.SrcPath, req.Libraries)
 		if err != nil {
 			return nil, err
 		}
 	default:
 		return nil, ErrUnsupportedChaincodeType
 	}
-	now:=time.Now()
+	now := time.Now()
 	depSpec, err := proto.Marshal(&peer.ChaincodeDeploymentSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
 			ChaincodeId: &peer.ChaincodeID{Name: req.ChainCodeName, Path: req.Namespace, Version: req.ChainCodeVersion},
 			Type:        peer.ChaincodeSpec_Type(req.ChainCodeType),
 		},
-		CodePackage: packageBytes,
-		EffectiveDate:&timestamp.Timestamp{Seconds: int64(now.Second()), Nanos: int32(now.Nanosecond())},
+		CodePackage:   packageBytes,
+		EffectiveDate: &timestamp.Timestamp{Seconds: int64(now.Second()), Nanos: int32(now.Nanosecond())},
 	})
 	if err != nil {
 		return nil, err
@@ -151,9 +158,9 @@ func createInstallProposal(identity *Identity, req *InstallRequest) (*transactio
 
 // createInstantiateProposal creates instantiate proposal transaction for already installed chaincode.
 // transaction is not send from this func
-func createInstantiateProposal(identity *Identity, req *ChainCode,operation string) (*transactionProposal, error) {
-	if operation!="deploy" && operation!="upgrade"{
-		return nil,fmt.Errorf("install proposall accept only 'deploy' and 'upgrade' operations")
+func createInstantiateProposal(identity *Identity, req *ChainCode, operation string) (*transactionProposal, error) {
+	if operation != "deploy" && operation != "upgrade" {
+		return nil, fmt.Errorf("install proposall accept only 'deploy' and 'upgrade' operations")
 	}
 
 	depSpec, err := proto.Marshal(&peer.ChaincodeDeploymentSpec{
@@ -223,64 +230,68 @@ func createInstantiateProposal(identity *Identity, req *ChainCode,operation stri
 }
 
 // packGolangCC read provided src expecting Golang source code, repackage it in provided namespace, and compress it
-func packGolangCC(namespace, source string) ([]byte, error) {
+func packGolangCC(namespace, source string, libs []ChaincodeLibrary) ([]byte, error) {
 
-	buf := new(bytes.Buffer)
-	tw := tar.NewWriter(buf)
+	twBuf := new(bytes.Buffer)
+	tw := tar.NewWriter(twBuf)
 
-	_, err := os.Stat(source)
-	if err != nil {
-		return nil, err
-	}
-	baseDir := path.Join("/src", namespace)
-	err = filepath.Walk(source,
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			header, err := tar.FileInfoHeader(info, info.Name())
-			if err != nil {
-				return err
-			}
-			header.Mode = 0100000
-			if baseDir != "" {
-				header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, source))
-
-			}
-			if header.Name == baseDir {
-				return nil
-			}
-
-			if err := tw.WriteHeader(header); err != nil {
-				return err
-			}
-
-			if info.IsDir() {
-				return nil
-			}
-
-			file, err := os.Open(path)
-			if err != nil {
-				return err
-			}
-			defer file.Close()
-			_, err = io.Copy(tw, file)
-			return err
-		})
-	if err != nil {
-		tw.Close()
-		return nil, err
-	}
 	var gzBuf bytes.Buffer
 	zw := gzip.NewWriter(&gzBuf)
-	_, err = zw.Write(buf.Bytes())
+
+	concatLibs := append(libs, ChaincodeLibrary{SrcPath: source, Namespace: namespace})
+
+	for _, s := range concatLibs {
+		_, err := os.Stat(s.SrcPath)
+		if err != nil {
+			return nil, err
+		}
+		baseDir := path.Join("/src", s.Namespace)
+		err = filepath.Walk(s.SrcPath,
+			func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+
+				header, err := tar.FileInfoHeader(info, "")
+				if err != nil {
+					return err
+				}
+
+				header.Mode = 0100000
+				if baseDir != "" {
+					header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, s.SrcPath))
+				}
+				if header.Name == baseDir {
+					return nil
+				}
+
+				if err := tw.WriteHeader(header); err != nil {
+					return err
+				}
+
+				if info.IsDir() {
+					return nil
+				}
+
+				file, err := os.Open(path)
+				if err != nil {
+					return err
+				}
+				defer file.Close()
+				_, err = io.Copy(tw, file)
+
+				return err
+			})
+		if err != nil {
+			tw.Close()
+			return nil, err
+		}
+	}
+	_, err := zw.Write(twBuf.Bytes())
 	if err != nil {
 		return nil, err
 	}
 	tw.Close()
 	zw.Close()
-	if err != nil {
-		return nil, err
-	}
 	return gzBuf.Bytes(), nil
 }
