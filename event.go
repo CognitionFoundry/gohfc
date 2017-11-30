@@ -13,8 +13,10 @@ import (
 	"github.com/hyperledger/fabric/protos/msp"
 	"io"
 	"github.com/hyperledger/fabric/protos/common"
+	"time"
 )
 
+const GRPC_MAX_SIZE  =100 *1024*1024
 // BlockEventResponse holds event response when block is committed to peer.
 type BlockEventResponse struct {
 	// Error is error message.
@@ -40,7 +42,9 @@ type eventHub struct {
 }
 
 func (e *eventHub) connect(ctx context.Context, p *Peer) (error) {
-	p.Opts = append(p.Opts, grpc.WithBlock())
+	p.Opts = append(p.Opts, grpc.WithBlock(),grpc.WithTimeout(5*time.Second),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(GRPC_MAX_SIZE),
+			grpc.MaxCallSendMsgSize(GRPC_MAX_SIZE)))
 	conn, err := grpc.Dial(p.Uri, p.Opts...)
 	if err != nil {
 		return err
