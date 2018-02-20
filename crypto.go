@@ -17,6 +17,8 @@ import (
 	"golang.org/x/crypto/sha3"
 	"hash"
 	"math/big"
+	"net"
+	"net/mail"
 )
 
 // CryptSuite defines common interface for different crypto implementations.
@@ -25,7 +27,7 @@ type CryptoSuite interface {
 	// GenerateKey returns PrivateKey.
 	GenerateKey() (interface{}, error)
 	// CreateCertificateRequest will create CSR request. It takes enrolmentId and Private key
-	CreateCertificateRequest(enrolmentId string, key interface{}) ([]byte, error)
+	CreateCertificateRequest(enrollmentId string, key interface{}, hosts []string) ([]byte, error)
 	// Sign signs message. It takes message to sign and Private key
 	Sign(msg []byte, key interface{}) ([]byte, error)
 	// Hash computes Hash value of provided data. Hash function will be different in different crypto implementations.
@@ -62,22 +64,46 @@ func (c *ECCryptSuite) GenerateKey() (interface{}, error) {
 	return key, nil
 }
 
-func (c *ECCryptSuite) CreateCertificateRequest(enrolmentId string, key interface{}) ([]byte, error) {
-	if enrolmentId == "" {
+func (c *ECCryptSuite) CreateCertificateRequest(enrollmentId string, key interface{}, hosts []string) ([]byte, error) {
+	if enrollmentId == "" {
 		return nil, ErrEnrollmentIdMissing
 	}
 	subj := pkix.Name{
-		CommonName: enrolmentId,
+		CommonName: enrollmentId,
 	}
 	rawSubj := subj.ToRDNSequence()
 
-	asn1Subj, _ := asn1.Marshal(rawSubj)
+	asn1Subj, err := asn1.Marshal(rawSubj)
+	if err != nil {
+		return nil, err
+	}
+
+	ipAddr := make([]net.IP, 0)
+	emailAddr := make([]string, 0)
+	dnsAddr := make([]string, 0)
+
+	for i := range hosts {
+		if ip := net.ParseIP(hosts[i]); ip != nil {
+			ipAddr = append(ipAddr, ip)
+		} else if email, err := mail.ParseAddress(hosts[i]); err == nil && email != nil {
+			emailAddr = append(emailAddr, email.Address)
+		} else {
+			dnsAddr = append(dnsAddr, hosts[i])
+		}
+	}
+
 	template := x509.CertificateRequest{
 		RawSubject:         asn1Subj,
 		SignatureAlgorithm: c.sigAlgorithm,
+		IPAddresses:        ipAddr,
+		EmailAddresses:     emailAddr,
+		DNSNames:           dnsAddr,
 	}
 
-	csrBytes, _ := x509.CreateCertificateRequest(rand.Reader, &template, key)
+	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)
+	if err != nil {
+		return nil, err
+	}
 	csr := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrBytes})
 	return csr, nil
 }
@@ -102,7 +128,7 @@ func (c *ECCryptSuite) Sign(msg []byte, k interface{}) ([]byte, error) {
 }
 
 // ECDSA signature can be "exploited" using symmetry of S values.
-// Fabric (by convention) accepts only signatures with low-S values
+// Fabric (by convention) accepts only signatures with lowS values
 // If result of a signature is high-S value we have to subtract S from curve.N
 // For more details https://github.com/bitcoin/bips/blob/master/bip-0062.mediawiki
 func (c *ECCryptSuite) preventMalleability(k *ecdsa.PrivateKey, S *big.Int) {

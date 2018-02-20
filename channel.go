@@ -15,14 +15,6 @@ const LSCC = "lscc"
 const QSCC = "qscc"
 const CSCC = "cscc"
 
-// Channel define channel
-type Channel struct {
-	// ChannelName is channel name over which operations will be executed.
-	ChannelName string
-	// MspId identify which member service in peer must be used to verify operation.
-	MspId string
-}
-
 // QueryChannelsResponse holds the result from querying which channels peer is currently joined
 type QueryChannelsResponse struct {
 	PeerName string
@@ -50,7 +42,7 @@ func decodeChannelFromFs(path string) (*common.Envelope, error) {
 }
 
 // buildAndSignChannelConfig take channel config payload and prepare the structure need for join transaction
-func buildAndSignChannelConfig(identity *Identity, configPayload []byte, crypto CryptoSuite, channel *Channel) (*common.Envelope, error) {
+func buildAndSignChannelConfig(identity Identity, configPayload []byte, crypto CryptoSuite,channelId string) (*common.Envelope, error) {
 
 	pl := &common.Payload{}
 	if err := proto.Unmarshal(configPayload, pl); err != nil {
@@ -62,7 +54,7 @@ func buildAndSignChannelConfig(identity *Identity, configPayload []byte, crypto 
 	if err != nil {
 		return nil, err
 	}
-	creator, err := marshalProtoIdentity(identity, channel)
+	creator, err := marshalProtoIdentity(identity)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +78,7 @@ func buildAndSignChannelConfig(identity *Identity, configPayload []byte, crypto 
 	configSignature.Signature = sig
 	configUpdateEnvelope.Signatures = append(configUpdateEnvelope.GetSignatures(), configSignature)
 
-	channelHeaderBytes, err := channelHeader(common.HeaderType_CONFIG_UPDATE, txId, channel,0,nil)
+	channelHeaderBytes, err := channelHeader(common.HeaderType_CONFIG_UPDATE, txId, channelId,0,nil)
 	header := header(sigHeaderBytes, channelHeaderBytes)
 
 	envelopeBytes, err := proto.Marshal(configUpdateEnvelope)

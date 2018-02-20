@@ -11,6 +11,7 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/hyperledger/fabric/protos/orderer"
 	"context"
+	"fmt"
 )
 
 // FabricClient expose API's to work with Hyperledger Fabric
@@ -21,9 +22,9 @@ type FabricClient struct {
 	EventPeers map[string]*Peer
 }
 
-// CreateChannel read channel config generated from configtxgen and send it to orderer
-// This step is needed before any peer is able to join the channel.
-func (c *FabricClient) CreateChannel(identity *Identity, path string, channel *Channel, orderer string) (error) {
+// CreateUpdateChannel read channel config generated (usually) from configtxgen and send it to orderer
+// This step is needed before any peer is able to join the channel and before any future updates of the channel.
+func (c *FabricClient) CreateUpdateChannel(identity Identity, path string, channelId string, orderer string) (error) {
 
 	ord, ok := c.Orderers[orderer]
 	if !ok {
@@ -34,7 +35,7 @@ func (c *FabricClient) CreateChannel(identity *Identity, path string, channel *C
 	if err != nil {
 		return err
 	}
-	ou, err := buildAndSignChannelConfig(identity, envelope.GetPayload(), c.Crypto, channel)
+	ou, err := buildAndSignChannelConfig(identity, envelope.GetPayload(), c.Crypto, channelId)
 	if err != nil {
 		return err
 	}
@@ -49,9 +50,9 @@ func (c *FabricClient) CreateChannel(identity *Identity, path string, channel *C
 }
 
 // JoinChannel send transaction to one or many Peers to join particular channel.
-// Channel must be created before this operation using CreateChannel or manually using CLI interface.
+// Channel must be created before this operation using `CreateUpdateChannel` or manually using CLI interface.
 // Orderers must be aware of this channel, otherwise operation will fail.
-func (c *FabricClient) JoinChannel(identity *Identity, channel *Channel, peers []string, orderer string) ([]*PeerResponse, error) {
+func (c *FabricClient) JoinChannel(identity Identity, channelId string, peers []string, orderer string) ([]*PeerResponse, error) {
 	ord, ok := c.Orderers[orderer]
 	if !ok {
 		return nil, ErrInvalidOrdererName
@@ -62,7 +63,7 @@ func (c *FabricClient) JoinChannel(identity *Identity, channel *Channel, peers [
 		return nil, ErrPeerNameNotFound
 	}
 
-	block, err := ord.getGenesisBlock(identity, c.Crypto, channel)
+	block, err := ord.getGenesisBlock(identity, c.Crypto, channelId)
 
 	if err != nil {
 		return nil, err
@@ -78,11 +79,11 @@ func (c *FabricClient) JoinChannel(identity *Identity, channel *Channel, peers [
 		Args: []string{"JoinChain"},
 		ArgBytes: blockBytes}
 
-	invocationBytes, err := chainCodeInvocationSpec(&chainCode)
+	invocationBytes, err := chainCodeInvocationSpec(chainCode)
 	if err != nil {
 		return nil, err
 	}
-	creator, err := marshalProtoIdentity(identity, channel)
+	creator, err := marshalProtoIdentity(identity)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +92,7 @@ func (c *FabricClient) JoinChannel(identity *Identity, channel *Channel, peers [
 		return nil, err
 	}
 	ext := &peer.ChaincodeHeaderExtension{ChaincodeId: &peer.ChaincodeID{Name: CSCC}}
-	channelHeaderBytes, err := channelHeader(common.HeaderType_ENDORSER_TRANSACTION, txId, nil, 0, ext)
+	channelHeaderBytes, err := channelHeader(common.HeaderType_ENDORSER_TRANSACTION, txId, "", 0, ext)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +127,8 @@ func (c *FabricClient) JoinChannel(identity *Identity, channel *Channel, peers [
 	return sendToPeers(execPeers, proposal), nil
 }
 
-// InstallChainCode install chainCode to one or many peers. Peer must be join the channel where chaincode will be installed.
-func (c *FabricClient) InstallChainCode(identity *Identity, req *InstallRequest, peers []string) ([]*PeerResponse, error) {
+// InstallChainCode install chainCode to one or many peers. Peer must be in the channel where chaincode will be installed.
+func (c *FabricClient) InstallChainCode(identity Identity, req *InstallRequest, peers []string) ([]*PeerResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -146,8 +147,12 @@ func (c *FabricClient) InstallChainCode(identity *Identity, req *InstallRequest,
 
 // InstantiateChainCode run installed chainCode to particular peer in particular channel.
 // Chaincode must be installed using InstallChainCode or CLI interface before this operation.
-// operation parameter can be `deploy` or `upgrade`.
-func (c *FabricClient) InstantiateChainCode(identity *Identity, req *ChainCode, peers []string, orderer string,operation string) (*orderer.BroadcastResponse, error) {
+// If this is first time running the chaincode operation must be `deploy`
+// If this operation update existing chaincode operation must be `upgrade`
+// collectionsConfig is configuration for private collections in versions >= 1.1. If not provided no private collections
+// will be created. collectionsConfig can be specified when chaincode is upgraded.
+func (c *FabricClient) InstantiateChainCode(identity Identity, req *ChainCode, peers []string, orderer string,
+	operation string, collectionsConfig []CollectionConfig) (*orderer.BroadcastResponse, error) {
 	ord, ok := c.Orderers[orderer]
 	if !ok {
 		return nil, ErrInvalidOrdererName
@@ -157,8 +162,19 @@ func (c *FabricClient) InstantiateChainCode(identity *Identity, req *ChainCode, 
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
 	}
+	var collConfigBytes []byte
+	if len(collectionsConfig) > 0 {
+		collectionPolicy, err := CollectionConfigToPolicy(collectionsConfig)
+		if err != nil {
+			return nil, err
+		}
+		collConfigBytes, err = proto.Marshal(&common.CollectionConfigPackage{Config: collectionPolicy})
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	prop, err := createInstantiateProposal(identity, req,operation)
+	prop, err := createInstantiateProposal(identity, req, operation, collConfigBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -186,20 +202,21 @@ func (c *FabricClient) InstantiateChainCode(identity *Identity, req *ChainCode, 
 }
 
 // QueryInstalledChainCodes get all chainCodes that are installed but not instantiated in one or many peers
-func (c *FabricClient) QueryInstalledChainCodes(identity *Identity, mspId string, peers []string) ([]*ChainCodesResponse, error) {
+func (c *FabricClient) QueryInstalledChainCodes(identity Identity, peers []string) ([]*ChainCodesResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
 	}
-
+	if len(identity.MspId) == 0 {
+		return nil, ErrMspMissing
+	}
 	chainCode := ChainCode{
-		Channel: &Channel{MspId: mspId},
-		Name:    LSCC,
-		Type:    ChaincodeSpec_GOLANG,
-		Args:    []string{"getinstalledchaincodes"},
+		Name: LSCC,
+		Type: ChaincodeSpec_GOLANG,
+		Args: []string{"getinstalledchaincodes"},
 	}
 
-	prop, err := createTransactionProposal(identity, &chainCode)
+	prop, err := createTransactionProposal(identity, chainCode)
 	if err != nil {
 		return nil, err
 	}
@@ -228,17 +245,17 @@ func (c *FabricClient) QueryInstalledChainCodes(identity *Identity, mspId string
 }
 
 // QueryInstantiatedChainCodes get all chainCodes that are running (instantiated) "inside" particular channel in peer
-func (c *FabricClient) QueryInstantiatedChainCodes(identity *Identity, channel *Channel, peers []string) ([]*ChainCodesResponse, error) {
+func (c *FabricClient) QueryInstantiatedChainCodes(identity Identity, channelId string, peers []string) ([]*ChainCodesResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
 	}
 
-	prop, err := createTransactionProposal(identity, &ChainCode{
-		Channel: channel,
-		Name:    LSCC,
-		Type:    ChaincodeSpec_GOLANG,
-		Args:    []string{"getchaincodes"},
+	prop, err := createTransactionProposal(identity, ChainCode{
+		ChannelId: channelId,
+		Name:      LSCC,
+		Type:      ChaincodeSpec_GOLANG,
+		Args:      []string{"getchaincodes"},
 	})
 	if err != nil {
 		return nil, err
@@ -266,20 +283,19 @@ func (c *FabricClient) QueryInstantiatedChainCodes(identity *Identity, channel *
 }
 
 // QueryChannels returns a list of channels that peer/s has joined
-func (c *FabricClient) QueryChannels(identity *Identity, mspId string, peers []string) ([]*QueryChannelsResponse, error) {
+func (c *FabricClient) QueryChannels(identity Identity, peers []string) ([]*QueryChannelsResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
 	}
 
 	chainCode := ChainCode{
-		Channel: &Channel{MspId: mspId},
-		Name:    CSCC,
-		Type:    ChaincodeSpec_GOLANG,
-		Args:    []string{"GetChannels"},
+		Name: CSCC,
+		Type: ChaincodeSpec_GOLANG,
+		Args: []string{"GetChannels"},
 	}
 
-	prop, err := createTransactionProposal(identity, &chainCode)
+	prop, err := createTransactionProposal(identity, chainCode)
 	if err != nil {
 		return nil, err
 	}
@@ -311,19 +327,19 @@ func (c *FabricClient) QueryChannels(identity *Identity, mspId string, peers []s
 }
 
 // QueryChannelInfo get current block height, current hash and prev hash about particular channel in peer/s
-func (c *FabricClient) QueryChannelInfo(identity *Identity, channel *Channel, peers []string) ([]*QueryChannelInfoResponse, error) {
+func (c *FabricClient) QueryChannelInfo(identity Identity, channelId string, peers []string) ([]*QueryChannelInfoResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
 	}
 	chainCode := ChainCode{
-		Channel: channel,
-		Name:    QSCC,
-		Type:    ChaincodeSpec_GOLANG,
-		Args:    []string{"GetChainInfo", channel.ChannelName},
+		ChannelId: channelId,
+		Name:      QSCC,
+		Type:      ChaincodeSpec_GOLANG,
+		Args:      []string{"GetChainInfo", channelId},
 	}
 
-	prop, err := createTransactionProposal(identity, &chainCode)
+	prop, err := createTransactionProposal(identity, chainCode)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +373,7 @@ func (c *FabricClient) QueryChannelInfo(identity *Identity, channel *Channel, pe
 // them to orderer for transaction - ReadOnly operation.
 // Because is expected all peers to be in same state this function allows very easy horizontal scaling by
 // distributing query operations between peers.
-func (c *FabricClient) Query(identity *Identity, chainCode *ChainCode, peers []string) ([]*QueryResponse, error) {
+func (c *FabricClient) Query(identity Identity, chainCode ChainCode, peers []string) ([]*QueryResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -385,17 +401,17 @@ func (c *FabricClient) Query(identity *Identity, chainCode *ChainCode, peers []s
 }
 
 // Invoke execute chainCode for ledger update. Peers that simulate the chainCode must be enough to satisfy the policy.
-// When Invoke returns with success this is not granite that ledger was update. Event with `transaction_id`
-// returned from Invoke will be send when actual block is committed.
+// When Invoke returns with success this is not granite that ledger was update. Invoke will return `transactionId`.
+// This ID will be transactionId in events.
 // It is responsibility of SDK user to build logic that handle successful and failed commits.
-// If chaincode execute `shim.Error` or simulation fails for other reasons this is considered as simulation failure.
-// In such case Invoke will return the error and transaction will NOT be send to orderer.
-func (c *FabricClient) Invoke(identity *Identity, chainCode *ChainCode, peers []string, orderer string) (*InvokeResponse, error) {
+// If chaincode call `shim.Error` or simulation fails for other reasons this is considered as simulation failure.
+// In such case Invoke will return the error and transaction will NOT be send to orderer. This transaction will NOT be
+// committed to blockchain.
+func (c *FabricClient) Invoke(identity Identity, chainCode ChainCode, peers []string, orderer string) (*InvokeResponse, error) {
 	ord, ok := c.Orderers[orderer]
 	if !ok {
 		return nil, ErrInvalidOrdererName
 	}
-
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -425,15 +441,18 @@ func (c *FabricClient) Invoke(identity *Identity, chainCode *ChainCode, peers []
 
 // QueryTransaction get data for particular transaction.
 // TODO for now it only returns status of the transaction, and not the whole data (payload, endorsement etc)
-func (c *FabricClient) QueryTransaction(identity *Identity, channel *Channel, txId string, peers []string) ([]*QueryTransactionResponse, error) {
+func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txId string, peers []string) ([]*QueryTransactionResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
 	}
-	chainCode := ChainCode{Channel: channel, Name: QSCC, Type: ChaincodeSpec_GOLANG,
-		Args: []string{"GetTransactionByID", channel.ChannelName, txId}}
+	chainCode := ChainCode{
+		ChannelId: channelId,
+		Name:      QSCC,
+		Type:      ChaincodeSpec_GOLANG,
+		Args:      []string{"GetTransactionByID", channelId, txId}}
 
-	prop, err := createTransactionProposal(identity, &chainCode)
+	prop, err := createTransactionProposal(identity, chainCode)
 	if err != nil {
 		return nil, err
 	}
@@ -442,6 +461,7 @@ func (c *FabricClient) QueryTransaction(identity *Identity, channel *Channel, tx
 		return nil, err
 	}
 	r := sendToPeers(execPeers, proposal)
+	fmt.Println(r)
 	response := make([]*QueryTransactionResponse, len(r))
 	for idx, p := range r {
 		qtr := QueryTransactionResponse{PeerName: p.Name, Error: p.Err}
@@ -459,22 +479,51 @@ func (c *FabricClient) QueryTransaction(identity *Identity, channel *Channel, tx
 	return response, nil
 }
 
-// Listen start listening for block events on particular peer and return all transactions from committed block.
-// Function is non blocking and events will be send using channel. No data is filtered/omitted.
-// To stop listen provide context.WithCancel and execute cancel.
-// The caller is responsible to read the channel, otherwise Listen will block until channel is read or overflow occurs.
-// Every message will represent single transaction in a block including its status, if event/s are sent from chaincode
-// they will be available in event response `CCEvents`.
-// SDK user can call Listen multiple times on different event peers. This is useful to have redundancy. If one peer fails,
-// events from other peers will be received. All Listen calls can share same channel.
-// In such scenarios every peer will send its own transactions from blocks. It is SDK user responsibility to
-// handle multiple identical events in same channel.
-func (c *FabricClient) Listen(ctx context.Context, identity *Identity, eventPeer, mspId string, response chan<- BlockEventResponse) (error) {
+// ListenForFullBlock will listen for events when new block is committed to blockchain and will return block height,
+// list of all transactions in this block, there statuses and events associated with them.
+// Listener is per channel, so user must create a new listener for every channel of interest.
+// This event listener will start listen from newest block, and actual (raw) block data will NOT be returned.
+// If user wants fo start listening from different blocks or want to receive full block bytes
+// he/she must construct the listener manually and provide proper seek and block options.
+// User must provide channel where events will be send and is responsibility for the user to read this channel.
+// To cancel listening provide context with cancellation option and call cancel.
+// User can listen for same events in same channel in multiple peers for redundancy using same `chan<- EventBlockResponse`
+// In this case every peer will send its events, so identical events may appear more than once in channel.
+func (c *FabricClient) ListenForFullBlock(ctx context.Context, identity Identity, eventPeer, channelId string, response chan<- EventBlockResponse) (error) {
 	ep, ok := c.EventPeers[eventPeer]
 	if !ok {
 		return ErrPeerNameNotFound
 	}
-	return newEventListener(ctx, response, c.Crypto, identity, mspId, ep)
+	listener, err := NewEventListener(ctx, c.Crypto, identity, *ep, channelId, EventTypeFullBlock)
+	if err != nil {
+		return err
+	}
+	err = listener.SeekNewest()
+	if err != nil {
+		return err
+	}
+	listener.Listen(response)
+	return nil
+}
+
+// ListenForFilteredBlock listen for events in blockchain. Difference with `ListenForFullBlock` is that event names
+// will be returned but NOT events data. Also full block data will not be available.
+// Other options are same as `ListenForFullBlock`.
+func (c *FabricClient) ListenForFilteredBlock(ctx context.Context, identity Identity, eventPeer, channelId string, response chan<- EventBlockResponse) (error) {
+	ep, ok := c.EventPeers[eventPeer]
+	if !ok {
+		return ErrPeerNameNotFound
+	}
+	listener, err := NewEventListener(ctx, c.Crypto, identity, *ep, channelId, EventTypeFiltered)
+	if err != nil {
+		return err
+	}
+	err = listener.SeekNewest()
+	if err != nil {
+		return err
+	}
+	listener.Listen(response)
+	return nil
 }
 
 // NewFabricClient creates new client from provided config file.

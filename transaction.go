@@ -54,9 +54,12 @@ type transactionProposal struct {
 }
 
 // marshalProtoIdentity creates SerializedIdentity from certificate and MSPid
-func marshalProtoIdentity(identity *Identity, channel *Channel) ([]byte, error) {
+func marshalProtoIdentity(identity Identity) ([]byte, error) {
+	if len(identity.MspId) < 1 {
+		return nil, ErrMspMissing
+	}
 	creator, err := proto.Marshal(&msp.SerializedIdentity{
-		Mspid:   channel.MspId,
+		Mspid:   identity.MspId,
 		IdBytes: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: identity.Certificate.Raw})})
 	if err != nil {
 		return nil, err
@@ -84,15 +87,15 @@ func header(signatureHeader, channelHeader []byte) (*common.Header) {
 	return header
 }
 
-func channelHeader(headerType common.HeaderType, tx *TransactionId, channel *Channel, epoch uint64, extension *peer.ChaincodeHeaderExtension) ([]byte, error) {
+func channelHeader(headerType common.HeaderType, tx *TransactionId, channelId string, epoch uint64, extension *peer.ChaincodeHeaderExtension) ([]byte, error) {
 	ts, err := ptypes.TimestampProto(time.Now())
 	if err != nil {
 		return nil, err
 	}
 	var channelName string
 
-	if channel != nil {
-		channelName = channel.ChannelName
+	if len(channelId) > 0 {
+		channelName = channelId
 	}
 	payloadChannelHeader := &common.ChannelHeader{
 		Type:      int32(headerType),
@@ -147,7 +150,7 @@ func generateTxId(nonce, creator []byte) string {
 	return hex.EncodeToString(f.Sum(nil))
 }
 
-func chainCodeInvocationSpec(chainCode *ChainCode) ([]byte, error) {
+func chainCodeInvocationSpec(chainCode ChainCode) ([]byte, error) {
 
 	invocation := &peer.ChaincodeInvocationSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
@@ -175,7 +178,7 @@ func proposal(header, payload []byte) ([]byte, error) {
 	return propBytes, nil
 }
 
-func signedProposal(prop []byte, identity *Identity, crypt CryptoSuite) (*peer.SignedProposal, error) {
+func signedProposal(prop []byte, identity Identity, crypt CryptoSuite) (*peer.SignedProposal, error) {
 	sb, err := crypt.Sign(prop, identity.PrivateKey)
 	if err != nil {
 		return nil, err
@@ -184,6 +187,8 @@ func signedProposal(prop []byte, identity *Identity, crypt CryptoSuite) (*peer.S
 }
 
 // sendToPeers send proposal to all peers in the list for endorsement asynchronously and wait for there response.
+// there is no difference in what order results will e returned and is `p.Endorse()` guarantee that there will be
+// response, so no need of complex synchronisation and wait groups
 func sendToPeers(peers []*Peer, prop *peer.SignedProposal) []*PeerResponse {
 	ch := make(chan *PeerResponse)
 	l := len(peers)
@@ -198,12 +203,12 @@ func sendToPeers(peers []*Peer, prop *peer.SignedProposal) []*PeerResponse {
 	return resp
 }
 
-func createTransactionProposal(identity *Identity, cc *ChainCode) (*transactionProposal, error) {
+func createTransactionProposal(identity Identity, cc ChainCode) (*transactionProposal, error) {
 	spec, err := chainCodeInvocationSpec(cc)
 	if err != nil {
 		return nil, err
 	}
-	creator, err := marshalProtoIdentity(identity, cc.Channel)
+	creator, err := marshalProtoIdentity(identity)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +218,7 @@ func createTransactionProposal(identity *Identity, cc *ChainCode) (*transactionP
 	}
 
 	extension := &peer.ChaincodeHeaderExtension{ChaincodeId: &peer.ChaincodeID{Name: cc.Name}}
-	channelHeader, err := channelHeader(common.HeaderType_ENDORSER_TRANSACTION, txId, cc.Channel, 0, extension)
+	channelHeader, err := channelHeader(common.HeaderType_ENDORSER_TRANSACTION, txId, cc.ChannelId, 0, extension)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +227,7 @@ func createTransactionProposal(identity *Identity, cc *ChainCode) (*transactionP
 		return nil, err
 	}
 
-	proposalPayload, err := proto.Marshal(&peer.ChaincodeProposalPayload{Input: spec,TransientMap:cc.TransientMap})
+	proposalPayload, err := proto.Marshal(&peer.ChaincodeProposalPayload{Input: spec, TransientMap: cc.TransientMap})
 	if err != nil {
 		return nil, err
 	}
@@ -260,8 +265,8 @@ func createTransaction(proposal []byte, endorsement []*PeerResponse) ([]byte, er
 				pl = e.Response.Payload
 			}
 		} else {
-			if e.Err!=nil{
-				return nil,e.Err
+			if e.Err != nil {
+				return nil, e.Err
 			}
 			return nil, ErrBadTransactionStatus
 		}
@@ -298,18 +303,18 @@ func createTransaction(proposal []byte, endorsement []*PeerResponse) ([]byte, er
 	}
 
 	payload, err := proto.Marshal(&peer.ChaincodeActionPayload{
-		Action:&peer.ChaincodeEndorsedAction{
-			ProposalResponsePayload:propResp.Payload,
-			Endorsements:mEndorsements,
+		Action: &peer.ChaincodeEndorsedAction{
+			ProposalResponsePayload: propResp.Payload,
+			Endorsements:            mEndorsements,
 		},
-		ChaincodeProposalPayload:proposedPayload,
+		ChaincodeProposalPayload: proposedPayload,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	sTransaction, err := proto.Marshal(&peer.Transaction{
-		Actions:[]*peer.TransactionAction{{Header: originalProposalHeader.SignatureHeader, Payload: payload}},
+		Actions: []*peer.TransactionAction{{Header: originalProposalHeader.SignatureHeader, Payload: payload}},
 	})
 	if err != nil {
 		return nil, err
@@ -353,7 +358,7 @@ func getChainCodeProposalPayload(bytes []byte) (*peer.ChaincodeProposalPayload, 
 func decodeTransaction(payload []byte) (int32, error) {
 	transaction := new(peer.ProcessedTransaction)
 	if err := proto.Unmarshal(payload, transaction); err != nil {
-		return 0,err
+		return 0, err
 	}
 	//DecodeBlockEnvelope(transaction.TransactionEnvelope)
 	return transaction.ValidationCode, nil

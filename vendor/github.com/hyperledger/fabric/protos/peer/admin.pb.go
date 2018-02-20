@@ -15,6 +15,7 @@ It is generated from these files:
 	peer/proposal.proto
 	peer/proposal_response.proto
 	peer/query.proto
+	peer/resources.proto
 	peer/signed_cc_dep_spec.proto
 	peer/transaction.proto
 
@@ -29,7 +30,9 @@ It has these top-level messages:
 	ChaincodeInvocationSpec
 	ChaincodeEvent
 	ChaincodeMessage
-	PutStateInfo
+	GetState
+	PutState
+	DelState
 	GetStateByRange
 	GetQueryResult
 	GetHistoryForKey
@@ -44,8 +47,13 @@ It has these top-level messages:
 	Register
 	Rejection
 	Unregister
+	FilteredBlock
+	FilteredTransaction
+	FilteredTransactionActions
+	FilteredChaincodeAction
 	SignedEvent
 	Event
+	DeliverResponse
 	PeerID
 	PeerEndpoint
 	SignedProposal
@@ -61,6 +69,12 @@ It has these top-level messages:
 	ChaincodeInfo
 	ChannelQueryResponse
 	ChannelInfo
+	APIResource
+	ChaincodeIdentifier
+	ChaincodeValidation
+	VSCCArgs
+	ChaincodeEndorsement
+	ConfigTree
 	SignedChaincodeDeploymentSpec
 	SignedTransaction
 	ProcessedTransaction
@@ -406,7 +420,7 @@ func init() { proto.RegisterFile("peer/admin.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
 	// 418 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xac, 0x93, 0x41, 0x6f, 0xd3, 0x30,
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x93, 0x41, 0x6f, 0xd3, 0x30,
 	0x14, 0xc7, 0x9b, 0x42, 0x0b, 0x79, 0x1b, 0xcc, 0x58, 0x08, 0xaa, 0x4e, 0x08, 0x94, 0x13, 0x5c,
 	0x1c, 0x69, 0x1c, 0x38, 0x20, 0x0e, 0xdd, 0x12, 0x06, 0x62, 0x4b, 0x23, 0x67, 0x15, 0x02, 0x09,
 	0x4d, 0x49, 0xf3, 0xe6, 0x55, 0x38, 0x73, 0xb0, 0x9d, 0x4a, 0xfb, 0x3a, 0x7c, 0x2e, 0x3e, 0x0c,

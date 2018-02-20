@@ -1,0 +1,36 @@
+---
+crypto:
+  family: ecdsa
+  algorithm: P256-SHA256
+  hash: SHA2-256
+orderers:
+  orderer0:
+    host: orderer0.example.com:7050
+    useTLS: false
+    tlsPath: /path/to/tls/server.pem
+  orderer1:
+    host: orderer0.example.com:7048
+    useTLS: false
+    tlsPath: /path/to/tls/server.pem
+peers:
+  peer01:
+    host: peer0.example.com:7051
+    useTLS: false
+    tlsPath: /path/to/tls/server.pem
+  peer11:
+    host: peer1.example.com:8051
+    useTLS: false
+    tlsPath: /path/to/tls/server.pem
+  peer02:
+    host: peer0.example.com:9051
+    useTLS: false
+    tlsPath: /path/to/tls/server.pem
+  peer12:
+      host: peer1.example.com:10051
+      useTLS: false
+      tlsPath: /path/to/tls/server.pem
+eventPeers:
+  peer0:
+    host: peer0.example.com:7051
+    useTLS: false
+    tlsPath: /path/to/tls/server.pem

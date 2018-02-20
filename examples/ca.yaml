@@ -1,0 +1,8 @@
+---
+url: http://ca.example.com:7052
+skipTLSValidation: true
+mspId: comp1Msp
+crypto:
+  family: ecdsa
+  algorithm: P256-SHA256
+  hash: SHA2-256

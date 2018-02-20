@@ -17,10 +17,31 @@ import (
 type Identity struct {
 	Certificate *x509.Certificate
 	PrivateKey  interface{}
+	MspId       string
 }
+
 // EnrollmentId get enrollment id from certificate
 func (i *Identity) EnrollmentId() string {
 	return i.Certificate.Subject.CommonName
+}
+
+// EnrollmentId get enrollment id from certificate
+func (i *Identity) ToPem() ([]byte, []byte, error) {
+
+	switch i.PrivateKey.(type) {
+	case *ecdsa.PrivateKey:
+		cast := i.PrivateKey.(*ecdsa.PrivateKey)
+		b, err := x509.MarshalECPrivateKey(cast)
+		if err != nil {
+			return nil, nil, err
+		}
+		privateKey := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: b})
+		cert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: i.Certificate.Raw})
+		return cert, privateKey, nil
+
+	default:
+		return nil, nil, ErrInvalidKeyType
+	}
 }
 
 // MarshalIdentity marshal identity to string
@@ -40,8 +61,9 @@ func MarshalIdentity(i *Identity) (string, error) {
 	default:
 		return "", ErrInvalidKeyType
 	}
+
 	cert = base64.RawStdEncoding.EncodeToString(i.Certificate.Raw)
-	str, err := json.Marshal(map[string]string{"cert": cert, "pk": pk})
+	str, err := json.Marshal(map[string]string{"cert": cert, "pk": pk, "mspid": i.MspId})
 	if err != nil {
 		return "", err
 	}
@@ -91,10 +113,11 @@ func UnmarshalIdentity(data string) (*Identity, error) {
 		return nil, ErrInvalidDataForParcelIdentity
 	}
 
-	identity := &Identity{Certificate: cert, PrivateKey: pk}
+	identity := &Identity{Certificate: cert, PrivateKey: pk, MspId: raw["mspid"]}
 	return identity, nil
 
 }
+
 // LoadCertFromFile read public key (pk) and private/secret kye (sk) from file system and return new Identity
 func LoadCertFromFile(pk, sk string) (*Identity, error) {
 	cf, err := ioutil.ReadFile(pk)
@@ -113,7 +136,7 @@ func LoadCertFromFile(pk, sk string) (*Identity, error) {
 		return nil, err
 	}
 
-	key, err := x509.ParsePKCS8PrivateKey(kpb.Bytes)
+	key, err := x509.ParseECPrivateKey(kpb.Bytes)
 	if err != nil {
 		return nil, err
 	}
