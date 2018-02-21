@@ -1231,18 +1231,11 @@ func concatErrors(errs []caResponseErr) (error) {
 	return fmt.Errorf(errors)
 }
 
-// NewFabricCAClient creates new FabricCAClient from configuration file
-// path is the file path for configuration file
-// transport is the transport that will be used in all requests. If transport is nil default transport will be used.
-// It is responsibility of the SDK user to provide correct settings and TLS certificates if custom transport is provided.
-func NewCAClient(path string, transport *http.Transport) (*FabricCAClient, error) {
-	config, err := NewCAConfig(path)
-	if err != nil {
-		return nil, err
-	}
+// NewCaClientFromConfig creates new FabricCAClient from CAConfig
+func NewCaClientFromConfig(config CAConfig, transport *http.Transport) (*FabricCAClient, error) {
 
 	var crypto CryptoSuite
-
+	var err error
 	switch config.CryptoConfig.Family {
 	case "ecdsa":
 		crypto, err = NewECCryptSuiteFromConfig(config.CryptoConfig)
@@ -1258,5 +1251,16 @@ func NewCAClient(path string, transport *http.Transport) (*FabricCAClient, error
 		Crypto: crypto,
 		Transport: transport,
 		MspId: config.MspId}, nil
+}
 
+// NewFabricCAClient creates new FabricCAClient from configuration file
+// path is the file path for configuration file
+// transport is the transport that will be used in all requests. If transport is nil default transport will be used.
+// It is responsibility of the SDK user to provide correct settings and TLS certificates if custom transport is provided.
+func NewCAClient(path string, transport *http.Transport) (*FabricCAClient, error) {
+	config, err := NewCAConfig(path)
+	if err != nil {
+		return nil, err
+	}
+	return NewCaClientFromConfig(*config, transport)
 }
