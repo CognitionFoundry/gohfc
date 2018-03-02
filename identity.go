@@ -135,8 +135,7 @@ func LoadCertFromFile(pk, sk string) (*Identity, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	key, err := x509.ParseECPrivateKey(kpb.Bytes)
+	key, err := x509.ParsePKCS8PrivateKey(kpb.Bytes)
 	if err != nil {
 		return nil, err
 	}
