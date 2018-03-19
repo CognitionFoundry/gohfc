@@ -462,7 +462,6 @@ func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txI
 		return nil, err
 	}
 	r := sendToPeers(execPeers, proposal)
-	fmt.Println(r)
 	response := make([]*QueryTransactionResponse, len(r))
 	for idx, p := range r {
 		qtr := QueryTransactionResponse{PeerName: p.Name, Error: p.Err}
