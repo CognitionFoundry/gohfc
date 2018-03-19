@@ -12,6 +12,7 @@ import (
 	"github.com/hyperledger/fabric/protos/orderer"
 	"context"
 	"fmt"
+	"encoding/json"
 )
 
 // FabricClient expose API's to work with Hyperledger Fabric
@@ -472,7 +473,9 @@ func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txI
 			if err != nil {
 				qtr.Error = err
 			}
-			qtr.Response = resp
+			qtr.Status = resp.GetStatus()
+			qtr.Message = resp.GetMessage()
+			qtr.Payload = json.RawMessage(resp.GetPayload())
 		}
 		response[idx] = &qtr
 	}

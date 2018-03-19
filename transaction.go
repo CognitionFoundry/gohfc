@@ -12,6 +12,8 @@ import (
 	"encoding/pem"
 	"time"
 
+	"encoding/json"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/hyperledger/fabric/protos/common"
@@ -45,7 +47,9 @@ type InvokeResponse struct {
 type QueryTransactionResponse struct {
 	PeerName string
 	Error    error
-	Response *peer.Response
+	Status   int32
+	Message  string
+	Payload  json.RawMessage
 }
 
 type transactionProposal struct {
