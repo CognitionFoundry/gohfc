@@ -468,11 +468,11 @@ func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txI
 		if p.Err != nil {
 			qtr.Error = p.Err
 		} else {
-			dec, err := decodeTransaction(p.Response.Response.GetPayload())
+			resp, err := decodeTransaction(p.Response.Response.GetPayload())
 			if err != nil {
 				qtr.Error = err
 			}
-			qtr.StatusCode = dec
+			qtr.Response = resp
 		}
 		response[idx] = &qtr
 	}
