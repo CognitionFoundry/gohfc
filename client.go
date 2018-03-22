@@ -15,6 +15,15 @@ import (
 	"github.com/hyperledger/fabric/protos/peer"
 )
 
+const (
+	installedChaincodesArg = "getinstalledchaincodes"
+	chaincodesArg          = "getchaincodes"
+	channelsArg            = "GetChannels"
+	channelInfoArg         = "GetChainInfo"
+	transactionByIDArg     = "GetTransactionByID"
+	joinChainArg           = "JoinChain"
+)
+
 // FabricClient expose API's to work with Hyperledger Fabric
 type FabricClient struct {
 	Crypto     CryptoSuite
@@ -26,7 +35,6 @@ type FabricClient struct {
 // CreateUpdateChannel read channel config generated (usually) from configtxgen and send it to orderer
 // This step is needed before any peer is able to join the channel and before any future updates of the channel.
 func (c *FabricClient) CreateUpdateChannel(identity Identity, path string, channelId string, orderer string) error {
-
 	ord, ok := c.Orderers[orderer]
 	if !ok {
 		return ErrInvalidOrdererName
@@ -77,7 +85,7 @@ func (c *FabricClient) JoinChannel(identity Identity, channelId string, peers []
 
 	chainCode := ChainCode{Name: CSCC,
 		Type:     ChaincodeSpec_GOLANG,
-		Args:     []string{"JoinChain"},
+		Args:     []string{joinChainArg},
 		ArgBytes: blockBytes}
 
 	invocationBytes, err := chainCodeInvocationSpec(chainCode)
@@ -214,7 +222,7 @@ func (c *FabricClient) QueryInstalledChainCodes(identity Identity, peers []strin
 	chainCode := ChainCode{
 		Name: LSCC,
 		Type: ChaincodeSpec_GOLANG,
-		Args: []string{"getinstalledchaincodes"},
+		Args: []string{installedChaincodesArg},
 	}
 
 	prop, err := createTransactionProposal(identity, chainCode)
@@ -256,7 +264,7 @@ func (c *FabricClient) QueryInstantiatedChainCodes(identity Identity, channelId 
 		ChannelId: channelId,
 		Name:      LSCC,
 		Type:      ChaincodeSpec_GOLANG,
-		Args:      []string{"getchaincodes"},
+		Args:      []string{chaincodesArg},
 	})
 	if err != nil {
 		return nil, err
@@ -293,7 +301,7 @@ func (c *FabricClient) QueryChannels(identity Identity, peers []string) ([]*Quer
 	chainCode := ChainCode{
 		Name: CSCC,
 		Type: ChaincodeSpec_GOLANG,
-		Args: []string{"GetChannels"},
+		Args: []string{channelsArg},
 	}
 
 	prop, err := createTransactionProposal(identity, chainCode)
@@ -337,7 +345,7 @@ func (c *FabricClient) QueryChannelInfo(identity Identity, channelId string, pee
 		ChannelId: channelId,
 		Name:      QSCC,
 		Type:      ChaincodeSpec_GOLANG,
-		Args:      []string{"GetChainInfo", channelId},
+		Args:      []string{channelInfoArg, channelId},
 	}
 
 	prop, err := createTransactionProposal(identity, chainCode)
@@ -442,7 +450,7 @@ func (c *FabricClient) Invoke(identity Identity, chainCode ChainCode, peers []st
 
 // QueryTransaction get data for particular transaction.
 // TODO for now it only returns status of the transaction, and not the whole data (payload, endorsement etc)
-func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txId string, peers []string) ([]*QueryTransactionResponse, error) {
+func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txId string, peers []string) ([]QueryTransactionResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -451,7 +459,7 @@ func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txI
 		ChannelId: channelId,
 		Name:      QSCC,
 		Type:      ChaincodeSpec_GOLANG,
-		Args:      []string{"GetTransactionByID", channelId, txId}}
+		Args:      []string{transactionByIDArg, channelId, txId}}
 
 	prop, err := createTransactionProposal(identity, chainCode)
 	if err != nil {
@@ -462,9 +470,9 @@ func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txI
 		return nil, err
 	}
 	r := sendToPeers(execPeers, proposal)
-	response := make([]*QueryTransactionResponse, len(r))
+	response := make([]QueryTransactionResponse, len(r))
 	for idx, p := range r {
-		qtr := QueryTransactionResponse{PeerName: p.Name, Error: p.Err}
+		qtr := QueryTransactionResponse{PeerName: p.Name}
 		if p.Err != nil {
 			qtr.Error = p.Err
 		} else {
@@ -476,7 +484,7 @@ func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txI
 			qtr.Message = resp.GetMessage()
 			qtr.Payload = json.RawMessage(resp.GetPayload())
 		}
-		response[idx] = &qtr
+		response[idx] = qtr
 	}
 	return response, nil
 }
@@ -550,7 +558,6 @@ func NewFabricClientFromConfig(config ClientConfig) (*FabricClient, error) {
 		}
 		newPeer.Name = name
 		peers[name] = newPeer
-
 	}
 
 	eventPeers := make(map[string]*Peer)

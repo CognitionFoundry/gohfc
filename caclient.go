@@ -1233,7 +1233,6 @@ func concatErrors(errs []caResponseErr) (error) {
 
 // NewCaClientFromConfig creates new FabricCAClient from CAConfig
 func NewCaClientFromConfig(config CAConfig, transport *http.Transport) (*FabricCAClient, error) {
-
 	var crypto CryptoSuite
 	var err error
 	switch config.CryptoConfig.Family {
