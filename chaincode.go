@@ -5,20 +5,20 @@ License: Apache License Version 2.0
 package gohfc
 
 import (
-	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/protos/peer"
-	"github.com/hyperledger/fabric/protos/common"
-	"path/filepath"
-	"strings"
-	"os"
-	"io"
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"archive/tar"
-	"path"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"time"
 	"fmt"
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/hyperledger/fabric/protos/common"
+	"github.com/hyperledger/fabric/protos/peer"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
 type ChainCodeType int32
@@ -43,7 +43,7 @@ type ChainCode struct {
 	rawArgs      [][]byte
 }
 
-func (c *ChainCode) toChainCodeArgs() ([][]byte) {
+func (c *ChainCode) toChainCodeArgs() [][]byte {
 	if len(c.rawArgs) > 0 {
 		return c.rawArgs
 	}
@@ -117,8 +117,8 @@ func createInstallProposal(identity Identity, req *InstallRequest) (*transaction
 	}
 
 	spec, err := chainCodeInvocationSpec(ChainCode{Type: req.ChainCodeType,
-		Name: LSCC,
-		Args: []string{"install"},
+		Name:     LSCC,
+		Args:     []string{"install"},
 		ArgBytes: depSpec,
 	})
 

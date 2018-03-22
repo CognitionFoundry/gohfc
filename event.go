@@ -6,15 +6,15 @@ package gohfc
 
 import (
 	"context"
-	"google.golang.org/grpc"
-	"time"
 	"fmt"
-	"github.com/hyperledger/fabric/protos/orderer"
-	"math"
-	"github.com/hyperledger/fabric/protos/common"
-	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/hyperledger/fabric/protos/common"
+	"github.com/hyperledger/fabric/protos/orderer"
 	"github.com/hyperledger/fabric/protos/peer"
+	"google.golang.org/grpc"
+	"math"
+	"time"
 )
 
 const (
@@ -72,8 +72,6 @@ type EventBlockResponseTransactionEvent struct {
 }
 
 func (e *EventListener) newConnection() error {
-
-
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -169,7 +167,7 @@ func (e *EventListener) Listen(response chan<- EventBlockResponse) {
 	}()
 }
 
-func (e *EventListener) parseFilteredBlock(block *peer.DeliverResponse_FilteredBlock, fullBlock bool) (*EventBlockResponse) {
+func (e *EventListener) parseFilteredBlock(block *peer.DeliverResponse_FilteredBlock, fullBlock bool) *EventBlockResponse {
 
 	response := &EventBlockResponse{
 		ChannelId:    block.FilteredBlock.ChannelId,
@@ -214,7 +212,7 @@ func (e *EventListener) parseFilteredBlock(block *peer.DeliverResponse_FilteredB
 	return response
 }
 
-func (e *EventListener) parseFullBlock(block *peer.DeliverResponse_Block, fullBlock bool) (*EventBlockResponse) {
+func (e *EventListener) parseFullBlock(block *peer.DeliverResponse_Block, fullBlock bool) *EventBlockResponse {
 
 	response := &EventBlockResponse{
 		BlockHeight: block.Block.Header.Number,

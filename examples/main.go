@@ -5,8 +5,8 @@ import (
 	"github.com/CognitionFoundry/gohfc"
 	"os"
 
-	"math/rand"
 	"context"
+	"math/rand"
 )
 
 const ADM_PK = "/path/to/admin/cert.pem"
@@ -468,7 +468,7 @@ func modifyIdentity(ca *gohfc.FabricCAClient, identity *gohfc.Identity) {
 				Value: "new value 1",
 			},
 		},
-		Secret: "new password",}
+		Secret: "new password"}
 	resp, err := ca.ModifyIdentity(identity, req)
 	if err != nil {
 		fmt.Println(err)

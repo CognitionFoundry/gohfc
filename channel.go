@@ -5,10 +5,10 @@ License: Apache License Version 2.0
 package gohfc
 
 import (
+	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/protos/common"
 	"io/ioutil"
-	"fmt"
 )
 
 const LSCC = "lscc"
@@ -28,6 +28,7 @@ type QueryChannelInfoResponse struct {
 	Error    error
 	Info     *common.BlockchainInfo
 }
+
 // decodeChannelFromFs reads channel.tx file from file system and decode it in Envelope structure
 func decodeChannelFromFs(path string) (*common.Envelope, error) {
 	channel, err := ioutil.ReadFile(path)
@@ -42,7 +43,7 @@ func decodeChannelFromFs(path string) (*common.Envelope, error) {
 }
 
 // buildAndSignChannelConfig take channel config payload and prepare the structure need for join transaction
-func buildAndSignChannelConfig(identity Identity, configPayload []byte, crypto CryptoSuite,channelId string) (*common.Envelope, error) {
+func buildAndSignChannelConfig(identity Identity, configPayload []byte, crypto CryptoSuite, channelId string) (*common.Envelope, error) {
 
 	pl := &common.Payload{}
 	if err := proto.Unmarshal(configPayload, pl); err != nil {
@@ -78,7 +79,7 @@ func buildAndSignChannelConfig(identity Identity, configPayload []byte, crypto C
 	configSignature.Signature = sig
 	configUpdateEnvelope.Signatures = append(configUpdateEnvelope.GetSignatures(), configSignature)
 
-	channelHeaderBytes, err := channelHeader(common.HeaderType_CONFIG_UPDATE, txId, channelId,0,nil)
+	channelHeaderBytes, err := channelHeader(common.HeaderType_CONFIG_UPDATE, txId, channelId, 0, nil)
 	header := header(sigHeaderBytes, channelHeaderBytes)
 
 	envelopeBytes, err := proto.Marshal(configUpdateEnvelope)
@@ -93,5 +94,5 @@ func buildAndSignChannelConfig(identity Identity, configPayload []byte, crypto C
 	if err != nil {
 		return nil, err
 	}
-	return &common.Envelope{Payload: commonPayload, Signature: signedCommonPayload }, nil
+	return &common.Envelope{Payload: commonPayload, Signature: signedCommonPayload}, nil
 }
