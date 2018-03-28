@@ -34,7 +34,7 @@ type FabricClient struct {
 
 // CreateUpdateChannel read channel config generated (usually) from configtxgen and send it to orderer
 // This step is needed before any peer is able to join the channel and before any future updates of the channel.
-func (c *FabricClient) CreateUpdateChannel(identity Identity, path string, channelId string, orderer string) error {
+func (c *FabricClient) CreateUpdateChannel(ctx context.Context, identity Identity, path string, channelId string, orderer string) error {
 	ord, ok := c.Orderers[orderer]
 	if !ok {
 		return ErrInvalidOrdererName
@@ -61,7 +61,7 @@ func (c *FabricClient) CreateUpdateChannel(identity Identity, path string, chann
 // JoinChannel send transaction to one or many Peers to join particular channel.
 // Channel must be created before this operation using `CreateUpdateChannel` or manually using CLI interface.
 // Orderers must be aware of this channel, otherwise operation will fail.
-func (c *FabricClient) JoinChannel(identity Identity, channelId string, peers []string, orderer string) ([]*PeerResponse, error) {
+func (c *FabricClient) JoinChannel(ctx context.Context, identity Identity, channelId string, peers []string, orderer string) ([]*PeerResponse, error) {
 	ord, ok := c.Orderers[orderer]
 	if !ok {
 		return nil, ErrInvalidOrdererName
@@ -133,11 +133,11 @@ func (c *FabricClient) JoinChannel(identity Identity, channelId string, peers []
 	if err != nil {
 		return nil, err
 	}
-	return sendToPeers(execPeers, proposal), nil
+	return sendToPeers(ctx, execPeers, proposal), nil
 }
 
 // InstallChainCode install chainCode to one or many peers. Peer must be in the channel where chaincode will be installed.
-func (c *FabricClient) InstallChainCode(identity Identity, req *InstallRequest, peers []string) ([]*PeerResponse, error) {
+func (c *FabricClient) InstallChainCode(ctx context.Context, identity Identity, req *InstallRequest, peers []string) ([]*PeerResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -150,7 +150,7 @@ func (c *FabricClient) InstallChainCode(identity Identity, req *InstallRequest, 
 	if err != nil {
 		return nil, err
 	}
-	return sendToPeers(execPeers, proposal), nil
+	return sendToPeers(ctx, execPeers, proposal), nil
 
 }
 
@@ -160,7 +160,7 @@ func (c *FabricClient) InstallChainCode(identity Identity, req *InstallRequest, 
 // If this operation update existing chaincode operation must be `upgrade`
 // collectionsConfig is configuration for private collections in versions >= 1.1. If not provided no private collections
 // will be created. collectionsConfig can be specified when chaincode is upgraded.
-func (c *FabricClient) InstantiateChainCode(identity Identity, req *ChainCode, peers []string, orderer string,
+func (c *FabricClient) InstantiateChainCode(ctx context.Context, identity Identity, req *ChainCode, peers []string, orderer string,
 	operation string, collectionsConfig []CollectionConfig) (*orderer.BroadcastResponse, error) {
 	ord, ok := c.Orderers[orderer]
 	if !ok {
@@ -193,7 +193,7 @@ func (c *FabricClient) InstantiateChainCode(identity Identity, req *ChainCode, p
 		return nil, err
 	}
 
-	transaction, err := createTransaction(prop.proposal, sendToPeers(execPeers, proposal))
+	transaction, err := createTransaction(prop.proposal, sendToPeers(ctx, execPeers, proposal))
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +211,7 @@ func (c *FabricClient) InstantiateChainCode(identity Identity, req *ChainCode, p
 }
 
 // QueryInstalledChainCodes get all chainCodes that are installed but not instantiated in one or many peers
-func (c *FabricClient) QueryInstalledChainCodes(identity Identity, peers []string) ([]*ChainCodesResponse, error) {
+func (c *FabricClient) QueryInstalledChainCodes(ctx context.Context, identity Identity, peers []string) ([]*ChainCodesResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -234,7 +234,7 @@ func (c *FabricClient) QueryInstalledChainCodes(identity Identity, peers []strin
 	if err != nil {
 		return nil, err
 	}
-	r := sendToPeers(execPeers, proposal)
+	r := sendToPeers(ctx, execPeers, proposal)
 
 	response := make([]*ChainCodesResponse, len(r))
 	for idx, p := range r {
@@ -254,7 +254,7 @@ func (c *FabricClient) QueryInstalledChainCodes(identity Identity, peers []strin
 }
 
 // QueryInstantiatedChainCodes get all chainCodes that are running (instantiated) "inside" particular channel in peer
-func (c *FabricClient) QueryInstantiatedChainCodes(identity Identity, channelId string, peers []string) ([]*ChainCodesResponse, error) {
+func (c *FabricClient) QueryInstantiatedChainCodes(ctx context.Context, identity Identity, channelId string, peers []string) ([]*ChainCodesResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -273,7 +273,7 @@ func (c *FabricClient) QueryInstantiatedChainCodes(identity Identity, channelId 
 	if err != nil {
 		return nil, err
 	}
-	r := sendToPeers(execPeers, proposal)
+	r := sendToPeers(ctx, execPeers, proposal)
 	response := make([]*ChainCodesResponse, len(r))
 	for idx, p := range r {
 		ic := ChainCodesResponse{PeerName: p.Name, Error: p.Err}
@@ -292,7 +292,7 @@ func (c *FabricClient) QueryInstantiatedChainCodes(identity Identity, channelId 
 }
 
 // QueryChannels returns a list of channels that peer/s has joined
-func (c *FabricClient) QueryChannels(identity Identity, peers []string) ([]*QueryChannelsResponse, error) {
+func (c *FabricClient) QueryChannels(ctx context.Context, identity Identity, peers []string) ([]*QueryChannelsResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -312,7 +312,7 @@ func (c *FabricClient) QueryChannels(identity Identity, peers []string) ([]*Quer
 	if err != nil {
 		return nil, err
 	}
-	r := sendToPeers(execPeers, proposal)
+	r := sendToPeers(ctx, execPeers, proposal)
 	response := make([]*QueryChannelsResponse, 0, len(r))
 	for _, pr := range r {
 		peerResponse := QueryChannelsResponse{PeerName: pr.Name}
@@ -336,7 +336,7 @@ func (c *FabricClient) QueryChannels(identity Identity, peers []string) ([]*Quer
 }
 
 // QueryChannelInfo get current block height, current hash and prev hash about particular channel in peer/s
-func (c *FabricClient) QueryChannelInfo(identity Identity, channelId string, peers []string) ([]*QueryChannelInfoResponse, error) {
+func (c *FabricClient) QueryChannelInfo(ctx context.Context, identity Identity, channelId string, peers []string) ([]*QueryChannelInfoResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -356,7 +356,7 @@ func (c *FabricClient) QueryChannelInfo(identity Identity, channelId string, pee
 	if err != nil {
 		return nil, err
 	}
-	r := sendToPeers(execPeers, proposal)
+	r := sendToPeers(ctx, execPeers, proposal)
 
 	response := make([]*QueryChannelInfoResponse, 0, len(r))
 	for _, pr := range r {
@@ -382,7 +382,7 @@ func (c *FabricClient) QueryChannelInfo(identity Identity, channelId string, pee
 // them to orderer for transaction - ReadOnly operation.
 // Because is expected all peers to be in same state this function allows very easy horizontal scaling by
 // distributing query operations between peers.
-func (c *FabricClient) Query(identity Identity, chainCode ChainCode, peers []string) ([]*QueryResponse, error) {
+func (c *FabricClient) Query(ctx context.Context, identity Identity, chainCode ChainCode, peers []string) ([]*QueryResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -395,7 +395,7 @@ func (c *FabricClient) Query(identity Identity, chainCode ChainCode, peers []str
 	if err != nil {
 		return nil, err
 	}
-	r := sendToPeers(execPeers, proposal)
+	r := sendToPeers(ctx, execPeers, proposal)
 	response := make([]*QueryResponse, len(r))
 	for idx, p := range r {
 		ic := QueryResponse{PeerName: p.Name, Error: p.Err}
@@ -416,7 +416,7 @@ func (c *FabricClient) Query(identity Identity, chainCode ChainCode, peers []str
 // If chaincode call `shim.Error` or simulation fails for other reasons this is considered as simulation failure.
 // In such case Invoke will return the error and transaction will NOT be send to orderer. This transaction will NOT be
 // committed to blockchain.
-func (c *FabricClient) Invoke(identity Identity, chainCode ChainCode, peers []string, orderer string) (*InvokeResponse, error) {
+func (c *FabricClient) Invoke(ctx context.Context, identity Identity, chainCode ChainCode, peers []string, orderer string) (*InvokeResponse, error) {
 	ord, ok := c.Orderers[orderer]
 	if !ok {
 		return nil, ErrInvalidOrdererName
@@ -433,7 +433,7 @@ func (c *FabricClient) Invoke(identity Identity, chainCode ChainCode, peers []st
 	if err != nil {
 		return nil, err
 	}
-	transaction, err := createTransaction(prop.proposal, sendToPeers(execPeers, proposal))
+	transaction, err := createTransaction(prop.proposal, sendToPeers(ctx, execPeers, proposal))
 	if err != nil {
 		return nil, err
 	}
@@ -450,7 +450,7 @@ func (c *FabricClient) Invoke(identity Identity, chainCode ChainCode, peers []st
 
 // QueryTransaction get data for particular transaction.
 // TODO for now it only returns status of the transaction, and not the whole data (payload, endorsement etc)
-func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txId string, peers []string) ([]QueryTransactionResponse, error) {
+func (c *FabricClient) QueryTransaction(ctx context.Context, identity Identity, channelId string, txId string, peers []string) ([]QueryTransactionResponse, error) {
 	execPeers := c.getPeers(peers)
 	if len(peers) != len(execPeers) {
 		return nil, ErrPeerNameNotFound
@@ -469,7 +469,7 @@ func (c *FabricClient) QueryTransaction(identity Identity, channelId string, txI
 	if err != nil {
 		return nil, err
 	}
-	r := sendToPeers(execPeers, proposal)
+	r := sendToPeers(ctx, execPeers, proposal)
 	response := make([]QueryTransactionResponse, len(r))
 	for idx, p := range r {
 		qtr := QueryTransactionResponse{PeerName: p.Name}

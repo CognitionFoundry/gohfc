@@ -14,6 +14,8 @@ import (
 
 	"encoding/json"
 
+	"context"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/hyperledger/fabric/protos/common"
@@ -193,12 +195,12 @@ func signedProposal(prop []byte, identity Identity, crypt CryptoSuite) (*peer.Si
 // sendToPeers send proposal to all peers in the list for endorsement asynchronously and wait for there response.
 // there is no difference in what order results will e returned and is `p.Endorse()` guarantee that there will be
 // response, so no need of complex synchronisation and wait groups
-func sendToPeers(peers []*Peer, prop *peer.SignedProposal) []*PeerResponse {
+func sendToPeers(ctx context.Context, peers []*Peer, prop *peer.SignedProposal) []*PeerResponse {
 	ch := make(chan *PeerResponse)
 	l := len(peers)
 	resp := make([]*PeerResponse, 0, l)
 	for _, p := range peers {
-		go p.Endorse(ch, prop)
+		go p.Endorse(ctx, ch, prop)
 	}
 	for i := 0; i < l; i++ {
 		resp = append(resp, <-ch)
