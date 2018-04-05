@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/CognitionFoundry/gohfc"
 	"os"
+
+	"github.com/bogdanprodanj/gohfc"
 
 	"context"
 	"math/rand"
@@ -117,7 +118,7 @@ func invoke(client *gohfc.FabricClient, identity gohfc.Identity, q []string) {
 		Args:      q,
 	}
 
-	result, err := client.Invoke(identity, chaincode, []string{"peer01", "peer11"}, "orderer0")
+	result, err := client.Invoke(context.Background(), identity, chaincode, []string{"peer01", "peer11"}, "orderer0")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(2)
@@ -136,7 +137,7 @@ func query(client *gohfc.FabricClient, identity *gohfc.Identity) {
 		Args:      []string{"query", "a"},
 	}
 
-	result, err := client.Query(*identity, *chaincode, []string{"peer01"})
+	result, err := client.Query(context.Background(), *identity, *chaincode, []string{"peer01"})
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -147,7 +148,7 @@ func query(client *gohfc.FabricClient, identity *gohfc.Identity) {
 func queryTransaction(client *gohfc.FabricClient, identity *gohfc.Identity) {
 
 	txid := "dd0945350a2e9e24515826f8fa6c7c8c5150001f0111478d7340d542dce6bd06"
-	result, err := client.QueryTransaction(*identity, "testchannel", txid, []string{"peer0"})
+	result, err := client.QueryTransaction(context.Background(), *identity, "testchannel", txid, []string{"peer0"})
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -164,7 +165,7 @@ func queryChannelInfo(client *gohfc.FabricClient) {
 
 	// Please note that we must provide MSPid manually because Identity is not from FabricCA
 	admin.MspId = "comp1Msp"
-	result, err := client.QueryChannelInfo(*admin, "testchannel", []string{"peer0", "peer1"})
+	result, err := client.QueryChannelInfo(context.Background(), *admin, "testchannel", []string{"peer0", "peer1"})
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -174,7 +175,7 @@ func queryChannelInfo(client *gohfc.FabricClient) {
 
 func queryChannels(client *gohfc.FabricClient, identity *gohfc.Identity) {
 
-	result, err := client.QueryChannels(*identity, []string{"peer0", "peer1"})
+	result, err := client.QueryChannels(context.Background(), *identity, []string{"peer0", "peer1"})
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -192,7 +193,7 @@ func queryInstantiatedChaincodes(client *gohfc.FabricClient) {
 	// Please note that we must provide MSPid manually because Identity is not from FabricCA
 	admin.MspId = "comp1Msp"
 
-	result, err := client.QueryInstantiatedChainCodes(*admin, "testchannel", []string{"peer0"})
+	result, err := client.QueryInstantiatedChainCodes(context.Background(), *admin, "testchannel", []string{"peer0"})
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -209,7 +210,7 @@ func queryInstalledChaincodes(client *gohfc.FabricClient) {
 	}
 	// Please note that we must provide MSPid manually because Identity is not from FabricCA
 	admin.MspId = "comp1Msp"
-	response, err := client.QueryInstalledChainCodes(*admin, []string{"peer0"})
+	response, err := client.QueryInstalledChainCodes(context.Background(), *admin, []string{"peer0"})
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -246,7 +247,7 @@ func instantiateCC(client *gohfc.FabricClient) {
 			Organizations:      []string{"comp1Msp", "comp2Msp"},
 		},
 	}
-	response, err := client.InstantiateChainCode(*admin, req, []string{"peer01", "peer11"}, "orderer0", "deploy", cc)
+	response, err := client.InstantiateChainCode(context.Background(), *admin, req, []string{"peer01", "peer11"}, "orderer0", "deploy", cc)
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -277,7 +278,7 @@ func installCC(client *gohfc.FabricClient) {
 			},
 		},
 	}
-	response, err := client.InstallChainCode(*admin, req, []string{"peer01", "peer11"})
+	response, err := client.InstallChainCode(context.Background(), *admin, req, []string{"peer01", "peer11"})
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -293,7 +294,7 @@ func joinChannel(client *gohfc.FabricClient) {
 	}
 	// Please note that we must provide MSPid manually because Identity is not from FabricCA
 	admin.MspId = "comp1Msp"
-	response, err := client.JoinChannel(*admin, "testchannel", []string{"peer01", "peer11"}, "orderer0")
+	response, err := client.JoinChannel(context.Background(), *admin, "testchannel", []string{"peer01", "peer11"}, "orderer0")
 	if err != nil {
 		fmt.Print(err)
 		os.Exit(2)
@@ -311,7 +312,7 @@ func createUpdateChannel(client *gohfc.FabricClient) {
 	}
 	// Please note that we must provide MSPid manually because Identity is not from FabricCA
 	admin.MspId = "comp1Msp"
-	err = client.CreateUpdateChannel(*admin, "/path/to/channel-artifacts/testchannel.tx", "testchannel", "orderer1")
+	err = client.CreateUpdateChannel(context.Background(), *admin, "/path/to/channel-artifacts/testchannel.tx", "testchannel", "orderer1")
 	fmt.Print(err)
 
 }
