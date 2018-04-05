@@ -36,7 +36,7 @@ type PeerResponse struct {
 // Endorse sends single transaction to single peer.
 func (p *Peer) Endorse(ctx context.Context, resp chan *PeerResponse, prop *peer.SignedProposal) {
 	if p.conn == nil {
-		conn, err := grpc.Dial(p.Uri, p.Opts...)
+		conn, err := grpc.DialContext(ctx, p.Uri, p.Opts...)
 		if err != nil {
 			resp <- &PeerResponse{Response: nil, Err: err, Name: p.Name}
 			return
