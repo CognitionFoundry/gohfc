@@ -5,8 +5,9 @@ License: Apache License Version 2.0
 package gohfc
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
+
+	"gopkg.in/yaml.v2"
 )
 
 // ClientConfig holds config data for crypto, peers and orderers

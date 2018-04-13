@@ -7,14 +7,15 @@ package gohfc
 import (
 	"context"
 	"fmt"
+	"math"
+	"time"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/orderer"
 	"github.com/hyperledger/fabric/protos/peer"
 	"google.golang.org/grpc"
-	"math"
-	"time"
 )
 
 const (

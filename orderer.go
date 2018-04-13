@@ -7,13 +7,14 @@ package gohfc
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric/protos/common"
 	"github.com/hyperledger/fabric/protos/orderer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
-	"time"
 )
 
 // Orderer expose API's to communicate with orderers.
