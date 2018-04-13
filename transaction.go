@@ -5,17 +5,22 @@ License: Apache License Version 2.0
 package gohfc
 
 import (
-	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric/protos/msp"
-	"encoding/pem"
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/hyperledger/fabric/protos/common"
-	"github.com/golang/protobuf/ptypes"
+	"encoding/pem"
 	"time"
+
+	"encoding/json"
+
+	"context"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes"
+	"github.com/hyperledger/fabric/protos/common"
+	"github.com/hyperledger/fabric/protos/msp"
 	"github.com/hyperledger/fabric/protos/peer"
-	"bytes"
 )
 
 // TransactionId represents transaction identifier. TransactionId is the unique transaction number.
@@ -41,11 +46,12 @@ type InvokeResponse struct {
 }
 
 // QueryTransactionResponse holds data from `client.QueryTransaction`
-// TODO it is not fully implemented!
 type QueryTransactionResponse struct {
-	PeerName   string
-	Error      error
-	StatusCode int32
+	PeerName string
+	Error    error
+	Status   int32
+	Message  string
+	Payload  json.RawMessage
 }
 
 type transactionProposal struct {
@@ -80,7 +86,7 @@ func signatureHeader(creator []byte, tx *TransactionId) ([]byte, error) {
 }
 
 // header creates new common.header from signature header and channel header
-func header(signatureHeader, channelHeader []byte) (*common.Header) {
+func header(signatureHeader, channelHeader []byte) *common.Header {
 	header := new(common.Header)
 	header.SignatureHeader = signatureHeader
 	header.ChannelHeader = channelHeader
@@ -103,8 +109,8 @@ func channelHeader(headerType common.HeaderType, tx *TransactionId, channelId st
 		Timestamp: ts,
 		ChannelId: channelName,
 		Epoch:     epoch,
+		TxId:      tx.TransactionId,
 	}
-	payloadChannelHeader.TxId = tx.TransactionId
 	if extension != nil {
 		serExt, err := proto.Marshal(extension)
 		if err != nil {
@@ -154,9 +160,12 @@ func chainCodeInvocationSpec(chainCode ChainCode) ([]byte, error) {
 
 	invocation := &peer.ChaincodeInvocationSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
-			Type:        peer.ChaincodeSpec_Type(chainCode.Type),
-			ChaincodeId: &peer.ChaincodeID{Name: chainCode.Name},
-			Input:       &peer.ChaincodeInput{Args: chainCode.toChainCodeArgs()},
+			Type: peer.ChaincodeSpec_Type(chainCode.Type),
+			ChaincodeId: &peer.ChaincodeID{
+				Name:    chainCode.Name,
+				Version: chainCode.Version,
+			},
+			Input: &peer.ChaincodeInput{Args: chainCode.toChainCodeArgs()},
 		},
 	}
 	invocationBytes, err := proto.Marshal(invocation)
@@ -189,12 +198,12 @@ func signedProposal(prop []byte, identity Identity, crypt CryptoSuite) (*peer.Si
 // sendToPeers send proposal to all peers in the list for endorsement asynchronously and wait for there response.
 // there is no difference in what order results will e returned and is `p.Endorse()` guarantee that there will be
 // response, so no need of complex synchronisation and wait groups
-func sendToPeers(peers []*Peer, prop *peer.SignedProposal) []*PeerResponse {
+func sendToPeers(ctx context.Context, peers []*Peer, prop *peer.SignedProposal) []*PeerResponse {
 	ch := make(chan *PeerResponse)
 	l := len(peers)
 	resp := make([]*PeerResponse, 0, l)
 	for _, p := range peers {
-		go p.Endorse(ch, prop)
+		go p.Endorse(ctx, ch, prop)
 	}
 	for i := 0; i < l; i++ {
 		resp = append(resp, <-ch)
@@ -217,7 +226,12 @@ func createTransactionProposal(identity Identity, cc ChainCode) (*transactionPro
 		return nil, err
 	}
 
-	extension := &peer.ChaincodeHeaderExtension{ChaincodeId: &peer.ChaincodeID{Name: cc.Name}}
+	extension := &peer.ChaincodeHeaderExtension{
+		ChaincodeId: &peer.ChaincodeID{
+			Name:    cc.Name,
+			Version: cc.Version,
+		},
+	}
 	channelHeader, err := channelHeader(common.HeaderType_ENDORSER_TRANSACTION, txId, cc.ChannelId, 0, extension)
 	if err != nil {
 		return nil, err
@@ -354,13 +368,37 @@ func getChainCodeProposalPayload(bytes []byte) (*peer.ChaincodeProposalPayload, 
 	return cpp, err
 }
 
-// TODO not fully implemented!
-func decodeTransaction(payload []byte) (int32, error) {
+func decodeTransaction(payload []byte) (*peer.Response, error) {
 	transaction := new(peer.ProcessedTransaction)
-	if err := proto.Unmarshal(payload, transaction); err != nil {
-		return 0, err
+	err := proto.Unmarshal(payload, transaction)
+	if err != nil {
+		return nil, err
 	}
-	//DecodeBlockEnvelope(transaction.TransactionEnvelope)
-	return transaction.ValidationCode, nil
+	p := new(common.Payload)
+	err = proto.Unmarshal(transaction.GetTransactionEnvelope().GetPayload(), p)
+	if err != nil {
+		return nil, err
+	}
+	tx := new(peer.Transaction)
+	err = proto.Unmarshal(p.Data, tx)
+	if err != nil {
+		return nil, err
+	}
+	chainCodeActionPayload := new(peer.ChaincodeActionPayload)
+	err = proto.Unmarshal(tx.Actions[0].GetPayload(), chainCodeActionPayload)
+	if err != nil {
+		return nil, err
+	}
+	propRespPayload := new(peer.ProposalResponsePayload)
+	err = proto.Unmarshal(chainCodeActionPayload.GetAction().GetProposalResponsePayload(), propRespPayload)
+	if err != nil {
+		return nil, err
+	}
+	caPayload := new(peer.ChaincodeAction)
+	err = proto.Unmarshal(propRespPayload.GetExtension(), caPayload)
+	if err != nil {
+		return nil, err
+	}
 
+	return caPayload.GetResponse(), nil
 }

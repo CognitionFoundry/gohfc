@@ -1223,7 +1223,7 @@ func (f *FabricCAClient) getTransport() *http.Transport {
 }
 
 // helper function to concat multiple errors that can be returned from FabricCA as one error
-func concatErrors(errs []caResponseErr) (error) {
+func concatErrors(errs []caResponseErr) error {
 	errors := ""
 	for _, e := range errs {
 		errors += e.Message + ": "
@@ -1233,7 +1233,6 @@ func concatErrors(errs []caResponseErr) (error) {
 
 // NewCaClientFromConfig creates new FabricCAClient from CAConfig
 func NewCaClientFromConfig(config CAConfig, transport *http.Transport) (*FabricCAClient, error) {
-
 	var crypto CryptoSuite
 	var err error
 	switch config.CryptoConfig.Family {
@@ -1247,10 +1246,10 @@ func NewCaClientFromConfig(config CAConfig, transport *http.Transport) (*FabricC
 	}
 
 	return &FabricCAClient{SkipTLSVerification: config.SkipTLSValidation,
-		Url: config.Uri,
-		Crypto: crypto,
+		Url:       config.Uri,
+		Crypto:    crypto,
 		Transport: transport,
-		MspId: config.MspId}, nil
+		MspId:     config.MspId}, nil
 }
 
 // NewFabricCAClient creates new FabricCAClient from configuration file
