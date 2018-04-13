@@ -109,8 +109,8 @@ func channelHeader(headerType common.HeaderType, tx *TransactionId, channelId st
 		Timestamp: ts,
 		ChannelId: channelName,
 		Epoch:     epoch,
+		TxId:      tx.TransactionId,
 	}
-	payloadChannelHeader.TxId = tx.TransactionId
 	if extension != nil {
 		serExt, err := proto.Marshal(extension)
 		if err != nil {
@@ -160,9 +160,12 @@ func chainCodeInvocationSpec(chainCode ChainCode) ([]byte, error) {
 
 	invocation := &peer.ChaincodeInvocationSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
-			Type:        peer.ChaincodeSpec_Type(chainCode.Type),
-			ChaincodeId: &peer.ChaincodeID{Name: chainCode.Name},
-			Input:       &peer.ChaincodeInput{Args: chainCode.toChainCodeArgs()},
+			Type: peer.ChaincodeSpec_Type(chainCode.Type),
+			ChaincodeId: &peer.ChaincodeID{
+				Name:    chainCode.Name,
+				Version: chainCode.Version,
+			},
+			Input: &peer.ChaincodeInput{Args: chainCode.toChainCodeArgs()},
 		},
 	}
 	invocationBytes, err := proto.Marshal(invocation)
@@ -223,7 +226,12 @@ func createTransactionProposal(identity Identity, cc ChainCode) (*transactionPro
 		return nil, err
 	}
 
-	extension := &peer.ChaincodeHeaderExtension{ChaincodeId: &peer.ChaincodeID{Name: cc.Name}}
+	extension := &peer.ChaincodeHeaderExtension{
+		ChaincodeId: &peer.ChaincodeID{
+			Name:    cc.Name,
+			Version: cc.Version,
+		},
+	}
 	channelHeader, err := channelHeader(common.HeaderType_ENDORSER_TRANSACTION, txId, cc.ChannelId, 0, extension)
 	if err != nil {
 		return nil, err
