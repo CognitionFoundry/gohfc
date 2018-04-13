@@ -14,11 +14,12 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
-	"golang.org/x/crypto/sha3"
 	"hash"
 	"math/big"
 	"net"
 	"net/mail"
+
+	"golang.org/x/crypto/sha3"
 )
 
 // CryptSuite defines common interface for different crypto implementations.

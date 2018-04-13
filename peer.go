@@ -5,12 +5,13 @@ License: Apache License Version 2.0
 package gohfc
 
 import (
-	"google.golang.org/grpc"
-	"github.com/hyperledger/fabric/protos/peer"
 	"context"
 	"fmt"
-	"google.golang.org/grpc/credentials"
 	"time"
+
+	"github.com/hyperledger/fabric/protos/peer"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -33,9 +34,9 @@ type PeerResponse struct {
 }
 
 // Endorse sends single transaction to single peer.
-func (p *Peer) Endorse(resp chan *PeerResponse, prop *peer.SignedProposal) {
+func (p *Peer) Endorse(ctx context.Context, resp chan *PeerResponse, prop *peer.SignedProposal) {
 	if p.conn == nil {
-		conn, err := grpc.Dial(p.Uri, p.Opts...)
+		conn, err := grpc.DialContext(ctx, p.Uri, p.Opts...)
 		if err != nil {
 			resp <- &PeerResponse{Response: nil, Err: err, Name: p.Name}
 			return
@@ -44,7 +45,7 @@ func (p *Peer) Endorse(resp chan *PeerResponse, prop *peer.SignedProposal) {
 		p.client = peer.NewEndorserClient(p.conn)
 	}
 
-	proposalResp, err := p.client.ProcessProposal(context.Background(), prop)
+	proposalResp, err := p.client.ProcessProposal(ctx, prop)
 	if err != nil {
 		resp <- &PeerResponse{Response: nil, Name: p.Name, Err: err}
 		return

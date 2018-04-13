@@ -5,14 +5,15 @@ License: Apache License Version 2.0
 package gohfc
 
 import (
-	"google.golang.org/grpc"
-	"github.com/hyperledger/fabric/protos/common"
-	"github.com/hyperledger/fabric/protos/orderer"
 	"context"
 	"fmt"
-	"google.golang.org/grpc/credentials"
-	"github.com/golang/protobuf/proto"
 	"time"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/hyperledger/fabric/protos/common"
+	"github.com/hyperledger/fabric/protos/orderer"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 )
 
