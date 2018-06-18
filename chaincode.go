@@ -16,8 +16,6 @@ import (
 	"compress/gzip"
 	"archive/tar"
 	"path"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"time"
 	"fmt"
 )
 
@@ -103,14 +101,13 @@ func createInstallProposal(identity Identity, req *InstallRequest) (*transaction
 	default:
 		return nil, ErrUnsupportedChaincodeType
 	}
-	now := time.Now()
+
 	depSpec, err := proto.Marshal(&peer.ChaincodeDeploymentSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
 			ChaincodeId: &peer.ChaincodeID{Name: req.ChainCodeName, Path: req.Namespace, Version: req.ChainCodeVersion},
 			Type:        peer.ChaincodeSpec_Type(req.ChainCodeType),
 		},
-		CodePackage:   packageBytes,
-		EffectiveDate: &timestamp.Timestamp{Seconds: int64(now.Second()), Nanos: int32(now.Nanosecond())},
+		CodePackage: packageBytes,
 	})
 	if err != nil {
 		return nil, err
